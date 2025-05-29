@@ -15,6 +15,15 @@ import * as ImagePicker from 'expo-image-picker';
 
 const { width, height } = Dimensions.get('window');
 
+// Simple UUID generator
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 export interface JobPhoto {
   id: string;
   uri: string;
@@ -67,9 +76,9 @@ export default function CameraScreen({
           // Save to device gallery
           await MediaLibrary.saveToLibraryAsync(photo.uri);
 
-          // Add to our photos array
+          // Add to our photos array - USE UUID INSTEAD OF Date.now()
           const newPhoto: JobPhoto = {
-            id: Date.now().toString(),
+            id: generateUUID(), // CHANGED: Use UUID instead of Date.now().toString()
             uri: photo.uri,
             type: activePhotoType,
             timestamp: new Date().toISOString(), // Store as ISO string
@@ -102,7 +111,7 @@ export default function CameraScreen({
 
       if (!result.canceled && result.assets[0]) {
         const newPhoto: JobPhoto = {
-          id: Date.now().toString(),
+          id: generateUUID(), // CHANGED: Use UUID instead of Date.now().toString()
           uri: result.assets[0].uri,
           type: activePhotoType,
           timestamp: new Date().toISOString(), // Store as ISO string

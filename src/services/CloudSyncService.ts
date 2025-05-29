@@ -47,6 +47,28 @@ class CloudSyncService {
     }
   }
 
+  // Check if job already exists in cloud
+  private async jobExistsInCloud(jobId: string, userId: string): Promise<boolean> {
+    try {
+      const result = await supabaseHTTP.select('jobs', 'id', { id: jobId, user_id: userId });
+      return !result.error && result.data && result.data.length > 0;
+    } catch (error) {
+      console.log('Error checking job existence:', error);
+      return false;
+    }
+  }
+
+  // Check if photo already exists in cloud
+  private async photoExistsInCloud(photoId: string, userId: string): Promise<boolean> {
+    try {
+      const result = await supabaseHTTP.select('job_photos', 'id', { id: photoId, user_id: userId });
+      return !result.error && result.data && result.data.length > 0;
+    } catch (error) {
+      console.log('Error checking photo existence:', error);
+      return false;
+    }
+  }
+
   // Compress image to reduce storage costs
   private async compressImage(uri: string): Promise<PhotoUploadResult> {
     try {
@@ -85,11 +107,23 @@ class CloudSyncService {
     }
   }
 
-  // Upload photo using HTTP client
+  // Upload photo using HTTP client with duplicate detection
   private async uploadPhoto(photo: JobPhoto, jobId: string): Promise<PhotoUploadResult> {
     try {
       const user = await getCurrentUser();
       if (!user) throw new Error('Not authenticated');
+
+      // Check if photo already exists in cloud
+      const photoExists = await this.photoExistsInCloud(photo.id, user.id);
+      if (photoExists) {
+        console.log(`Photo ${photo.id} already exists in cloud, skipping upload`);
+        return {
+          success: true,
+          path: `users/${user.id}/photos/${jobId}/${photo.id}.jpg`,
+          originalSize: 0,
+          compressedSize: 0
+        };
+      }
 
       // Compress image first
       const compressionResult = await this.compressImage(photo.uri);
@@ -110,10 +144,15 @@ class CloudSyncService {
       const uploadResult = await supabaseHTTP.uploadFile('job-photos', filePath, fileBase64);
 
       if (!uploadResult.success) {
-        return {
-          success: false,
-          error: uploadResult.error || 'Upload failed'
-        };
+        // If it's a "already exists" error, treat as success
+        if (uploadResult.error?.includes('already exists') || uploadResult.error?.includes('The resource already exists')) {
+          console.log(`Photo ${photo.id} already exists in storage, updating metadata only`);
+        } else {
+          return {
+            success: false,
+            error: uploadResult.error || 'Upload failed'
+          };
+        }
       }
 
       // Save photo metadata to database via HTTP
@@ -131,7 +170,16 @@ class CloudSyncService {
       const dbResult = await supabaseHTTP.insert('job_photos', photoData);
       
       if (dbResult.error) {
-        console.warn('Photo uploaded but metadata save failed:', dbResult.error);
+        // If metadata already exists, try updating instead
+        if (dbResult.error.includes('duplicate') || dbResult.error.includes('already exists')) {
+          console.log(`Photo metadata ${photo.id} already exists, updating...`);
+          const updateResult = await supabaseHTTP.update('job_photos', photoData, { id: photo.id });
+          if (updateResult.error) {
+            console.warn('Photo uploaded but metadata update failed:', updateResult.error);
+          }
+        } else {
+          console.warn('Photo uploaded but metadata save failed:', dbResult.error);
+        }
       }
 
       return {
@@ -170,7 +218,7 @@ class CloudSyncService {
     };
   }
 
-  // Sync single job to cloud using HTTP client
+  // Sync single job to cloud using HTTP client with duplicate detection
   async syncJob(job: Job): Promise<SyncResult> {
     try {
       const user = await getCurrentUser();
@@ -178,19 +226,35 @@ class CloudSyncService {
         return { success: false, error: 'Not authenticated' };
       }
 
+      // Check if job already exists in cloud
+      const jobExists = await this.jobExistsInCloud(job.id, user.id);
+
       // Upload job data via HTTP
       const jobData = this.jobToDbFormat(job, user.id);
-      const jobResult = await supabaseHTTP.insert('jobs', jobData);
-
-      if (jobResult.error) {
-        // If job already exists, try updating instead
-        if (jobResult.error.includes('duplicate') || jobResult.error.includes('already exists')) {
-          const updateResult = await supabaseHTTP.update('jobs', jobData, { id: job.id });
-          if (updateResult.error) {
-            throw new Error(updateResult.error);
+      
+      if (jobExists) {
+        // Update existing job
+        const updateResult = await supabaseHTTP.update('jobs', jobData, { id: job.id });
+        if (updateResult.error) {
+          throw new Error(updateResult.error);
+        }
+        console.log(`Job ${job.id} updated in cloud`);
+      } else {
+        // Insert new job
+        const jobResult = await supabaseHTTP.insert('jobs', jobData);
+        if (jobResult.error) {
+          // If job already exists, try updating instead
+          if (jobResult.error.includes('duplicate') || jobResult.error.includes('already exists')) {
+            const updateResult = await supabaseHTTP.update('jobs', jobData, { id: job.id });
+            if (updateResult.error) {
+              throw new Error(updateResult.error);
+            }
+            console.log(`Job ${job.id} updated in cloud (was duplicate)`);
+          } else {
+            throw new Error(jobResult.error);
           }
         } else {
-          throw new Error(jobResult.error);
+          console.log(`Job ${job.id} created in cloud`);
         }
       }
 
