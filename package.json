@@ -34,6 +34,7 @@
     "react-native-screens": "~4.10.0",
     "react-native-signature-canvas": "^4.7.4",
     "react-native-svg": "15.11.2",
+    "react-native-url-polyfill": "^2.0.0",
     "react-native-view-shot": "4.0.3",
     "react-native-web": "^0.20.0",
     "zod": "^3.25.36"

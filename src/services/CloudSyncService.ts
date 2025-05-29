@@ -1,6 +1,6 @@
 // services/CloudSyncService.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase, getCurrentUser, getUserProfile } from '../lib/supabase';
+import { supabaseHTTP, getCurrentUser } from './SupabaseHTTPClient';
 import { Job } from '../screens/HomeScreen';
 import { JobPhoto } from '../screens/CameraScreen';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -85,7 +85,7 @@ class CloudSyncService {
     }
   }
 
-  // Upload photo to Supabase Storage
+  // Upload photo using HTTP client
   private async uploadPhoto(photo: JobPhoto, jobId: string): Promise<PhotoUploadResult> {
     try {
       const user = await getCurrentUser();
@@ -97,7 +97,7 @@ class CloudSyncService {
         return compressionResult;
       }
 
-      // Read compressed file
+      // Read compressed file as base64
       const fileBase64 = await FileSystem.readAsStringAsync(compressionResult.path!, {
         encoding: FileSystem.EncodingType.Base64,
       });
@@ -106,27 +106,33 @@ class CloudSyncService {
       const fileName = `${jobId}/${photo.id}.jpg`;
       const filePath = `users/${user.id}/photos/${fileName}`;
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('job-photos')
-        .upload(filePath, decode(fileBase64), {
-          contentType: 'image/jpeg',
-          upsert: true
-        });
+      // Upload to Supabase Storage via HTTP
+      const uploadResult = await supabaseHTTP.uploadFile('job-photos', filePath, fileBase64);
 
-      if (error) throw error;
+      if (!uploadResult.success) {
+        return {
+          success: false,
+          error: uploadResult.error || 'Upload failed'
+        };
+      }
 
-      // Save photo metadata to database
-      await supabase.from('job_photos').upsert({
+      // Save photo metadata to database via HTTP
+      const photoData = {
         id: photo.id,
         job_id: jobId,
         user_id: user.id,
-        photo_type: photo.type as 'before' | 'during' | 'after',
+        photo_type: photo.type,
         file_path: filePath,
         file_size: compressionResult.compressedSize || 0,
         compressed: true,
-        created_at: photo.timestamp // Use the timestamp from JobPhoto
-      });
+        created_at: photo.timestamp
+      };
+
+      const dbResult = await supabaseHTTP.insert('job_photos', photoData);
+      
+      if (dbResult.error) {
+        console.warn('Photo uploaded but metadata save failed:', dbResult.error);
+      }
 
       return {
         success: true,
@@ -164,7 +170,7 @@ class CloudSyncService {
     };
   }
 
-  // Sync single job to cloud
+  // Sync single job to cloud using HTTP client
   async syncJob(job: Job): Promise<SyncResult> {
     try {
       const user = await getCurrentUser();
@@ -172,13 +178,21 @@ class CloudSyncService {
         return { success: false, error: 'Not authenticated' };
       }
 
-      // Upload job data
+      // Upload job data via HTTP
       const jobData = this.jobToDbFormat(job, user.id);
-      const { error: jobError } = await supabase
-        .from('jobs')
-        .upsert(jobData);
+      const jobResult = await supabaseHTTP.insert('jobs', jobData);
 
-      if (jobError) throw jobError;
+      if (jobResult.error) {
+        // If job already exists, try updating instead
+        if (jobResult.error.includes('duplicate') || jobResult.error.includes('already exists')) {
+          const updateResult = await supabaseHTTP.update('jobs', jobData, { id: job.id });
+          if (updateResult.error) {
+            throw new Error(updateResult.error);
+          }
+        } else {
+          throw new Error(jobResult.error);
+        }
+      }
 
       // Upload photos
       let photosSynced = 0;
@@ -210,7 +224,7 @@ class CloudSyncService {
     }
   }
 
-  // Sync all local jobs to cloud
+  // Sync all local jobs to cloud using HTTP client
   async syncAllJobs(): Promise<SyncResult> {
     if (this.syncInProgress) {
       return { success: false, error: 'Sync already in progress' };
@@ -249,11 +263,15 @@ class CloudSyncService {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      // Update user's job count
-      await supabase
-        .from('profiles')
-        .update({ jobs_count: localJobs.length })
-        .eq('id', user.id);
+      // Update user's job count via HTTP
+      const updateResult = await supabaseHTTP.update('profiles', 
+        { jobs_count: localJobs.length }, 
+        { id: user.id }
+      );
+
+      if (updateResult.error) {
+        console.warn('Failed to update job count:', updateResult.error);
+      }
 
       await this.updateLastSyncTime();
 
@@ -273,7 +291,7 @@ class CloudSyncService {
     }
   }
 
-  // Download jobs from cloud (for new device setup)
+  // Download jobs from cloud using HTTP client
   async downloadJobs(): Promise<SyncResult> {
     try {
       const user = await getCurrentUser();
@@ -281,27 +299,22 @@ class CloudSyncService {
         return { success: false, error: 'Not authenticated' };
       }
 
-      // Get jobs from cloud
-      const { data: cloudJobs, error: jobsError } = await supabase
-        .from('jobs')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      // Get jobs from cloud via HTTP
+      const jobsResult = await supabaseHTTP.select('jobs', '*', { user_id: user.id });
+      
+      if (jobsResult.error) {
+        throw new Error(jobsResult.error);
+      }
 
-      if (jobsError) throw jobsError;
+      const cloudJobs = jobsResult.data || [];
 
       // Get photo metadata for each job
       const jobsWithPhotos: Job[] = [];
       
-      for (const cloudJob of cloudJobs || []) {
-        const { data: photos, error: photosError } = await supabase
-          .from('job_photos')
-          .select('*')
-          .eq('job_id', cloudJob.id);
-
-        if (photosError) {
-          console.error('Error fetching photos for job:', photosError);
-        }
+      for (const cloudJob of cloudJobs) {
+        const photosResult = await supabaseHTTP.select('job_photos', '*', { job_id: cloudJob.id });
+        
+        const photos = photosResult.data || [];
 
         // Convert to local format
         const localJob: Job = {
@@ -314,11 +327,11 @@ class CloudSyncService {
           address: cloudJob.address,
           status: cloudJob.status,
           createdAt: cloudJob.created_at,
-          photos: (photos || []).map(photo => ({
+          photos: photos.map((photo: any) => ({
             id: photo.id,
             uri: `cloud://${photo.file_path}`, // Special URI to indicate cloud storage
             type: photo.photo_type,
-            timestamp: photo.created_at // Add the required timestamp property
+            timestamp: photo.created_at
           })),
           signature: cloudJob.signature_data,
           clientSignedName: cloudJob.client_signed_name,
@@ -364,7 +377,18 @@ class CloudSyncService {
         return { allowed: false, reason: 'Please sign in to create jobs' };
       }
 
-      const profile = await getUserProfile(user.id);
+      // Get user profile via HTTP
+      const profileResult = await supabaseHTTP.select('profiles', '*', { id: user.id });
+      
+      if (profileResult.error) {
+        throw new Error(profileResult.error);
+      }
+
+      const profile = profileResult.data?.[0];
+      if (!profile) {
+        return { allowed: false, reason: 'User profile not found' };
+      }
+
       const limits: Record<string, number | null> = {
         free: 20,
         starter: 200,
@@ -394,26 +418,25 @@ class CloudSyncService {
       return { allowed: false, reason: 'Error checking job limit' };
     }
   }
-}
 
-// Helper function to decode base64
-function decode(base64: string): Uint8Array {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  let result = new Uint8Array(Math.floor(base64.length * 3 / 4));
-  let bufferLength = 0;
-  
-  for (let i = 0; i < base64.length; i += 4) {
-    const a = chars.indexOf(base64.charAt(i));
-    const b = chars.indexOf(base64.charAt(i + 1));
-    const c = chars.indexOf(base64.charAt(i + 2));
-    const d = chars.indexOf(base64.charAt(i + 3));
-    
-    result[bufferLength++] = (a << 2) | (b >> 4);
-    if (c !== 64) result[bufferLength++] = ((b & 15) << 4) | (c >> 2);
-    if (d !== 64) result[bufferLength++] = ((c & 3) << 6) | d;
+  // Auto-sync single job (called after job creation/update)
+  async autoSyncJob(job: Job): Promise<void> {
+    try {
+      const user = await getCurrentUser();
+      if (user) {
+        // Fire and forget - don't block the UI
+        this.syncJob(job).then(result => {
+          if (result.success) {
+            console.log(`Job ${job.id} auto-synced to cloud`);
+          } else {
+            console.log(`Auto-sync failed for job ${job.id}:`, result.error);
+          }
+        });
+      }
+    } catch (error) {
+      console.log('Auto-sync error:', error);
+    }
   }
-  
-  return result.slice(0, bufferLength);
 }
 
 export const cloudSyncService = new CloudSyncService();

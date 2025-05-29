@@ -12,6 +12,8 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Job } from './HomeScreen';
+import { cloudSyncService } from '../services/CloudSyncService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Form validation schema
 const jobSchema = z.object({
@@ -49,29 +51,94 @@ export default function CreateJobScreen({ onJobCreated, editJob }: CreateJobScre
     } : undefined,
   });
 
-  const onSubmit = (data: JobFormData) => {
-    console.log('Job Data:', data);
-    
-    if (onJobCreated) {
-      onJobCreated(data);
-    } else {
-      // Fallback for standalone testing
-      Alert.alert(
-        'Job Created!',
-        `Job for ${data.clientName} has been created.`,
-        [
-          {
-            text: 'Create Another',
-            onPress: () => reset(),
-          },
-          {
-            text: 'Start Job',
-            onPress: () => {
-              console.log('Navigate to job details');
+  const onSubmit = async (data: JobFormData) => {
+    // Check job limits before creating (only for new jobs, not edits)
+    if (!editJob) {
+      try {
+        const limitCheck = await cloudSyncService.canCreateJob();
+        if (!limitCheck.allowed) {
+          Alert.alert(
+            'Upgrade Required',
+            limitCheck.reason || 'You have reached your job creation limit.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Learn About Upgrading', onPress: () => {
+                Alert.alert('Upgrade Info', 'Upgrade to Pro for unlimited jobs! Coming soon...');
+              }}
+            ]
+          );
+          return;
+        }
+      } catch (error) {
+        // If limit check fails, show warning but allow job creation for offline use
+        console.log('Limit check failed, allowing offline job creation:', error);
+      }
+    }
+
+    // Create the job object
+    const newJob: Job = {
+      id: editJob?.id || Date.now().toString(),
+      clientName: data.clientName,
+      clientEmail: data.clientEmail,
+      clientPhone: data.clientPhone,
+      serviceType: data.serviceType,
+      description: data.description,
+      address: data.address,
+      status: 'created',
+      createdAt: editJob?.createdAt || new Date().toISOString(),
+      photos: editJob?.photos || [],
+      signature: editJob?.signature,
+      clientSignedName: editJob?.clientSignedName,
+      jobSatisfaction: editJob?.jobSatisfaction,
+      completedAt: editJob?.completedAt,
+    };
+
+    try {
+      // Save to local storage
+      const existingJobsData = await AsyncStorage.getItem('proofly_jobs');
+      const existingJobs: Job[] = existingJobsData ? JSON.parse(existingJobsData) : [];
+      
+      if (editJob) {
+        // Update existing job
+        const jobIndex = existingJobs.findIndex(job => job.id === editJob.id);
+        if (jobIndex !== -1) {
+          existingJobs[jobIndex] = newJob;
+        }
+      } else {
+        // Add new job
+        existingJobs.push(newJob);
+      }
+      
+      await AsyncStorage.setItem('proofly_jobs', JSON.stringify(existingJobs));
+
+      // Auto-sync to cloud (non-blocking)
+      cloudSyncService.autoSyncJob(newJob);
+
+      console.log('Job Data:', data);
+      
+      if (onJobCreated) {
+        onJobCreated(data);
+      } else {
+        // Fallback for standalone testing
+        Alert.alert(
+          editJob ? 'Job Updated!' : 'Job Created!',
+          `Job for ${data.clientName} has been ${editJob ? 'updated' : 'created'}.`,
+          [
+            {
+              text: 'Create Another',
+              onPress: () => reset(),
             },
-          },
-        ]
-      );
+            {
+              text: 'Start Job',
+              onPress: () => {
+                console.log('Navigate to job details');
+              },
+            },
+          ]
+        );
+      }
+    } catch (error) {
+      Alert.alert('Error', `Failed to save job: ${error}`);
     }
   };
 
