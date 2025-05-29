@@ -20,14 +20,30 @@ export interface Job {
   serviceType: string;
   description?: string;
   address: string;
-  status: 'created' | 'in_progress' | 'photos_taken' | 'signed' | 'completed';
+  status: 'created' | 'in_progress' | 'completed';
   createdAt: string;
-  photos: Array<{ id: string; uri: string; type: string }>;
+  photos: Array<{ id: string; uri: string; type: 'before' | 'during' | 'after'; timestamp: string }>; // Fixed type
   signature?: string;
   clientSignedName?: string;
   jobSatisfaction?: string;
   completedAt?: string;
 }
+
+// Helper function to calculate job status based on new logic
+const calculateJobStatus = (job: Job): Job['status'] => {
+  // If has signature, always completed
+  if (job.signature) {
+    return 'completed';
+  }
+  
+  // If has photos but no signature, in progress
+  if (job.photos.length > 0) {
+    return 'in_progress';
+  }
+  
+  // If nothing done yet, created
+  return 'created';
+};
 
 interface HomeScreenProps {
   onNewJob: () => void;
@@ -46,10 +62,21 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
     try {
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       if (savedJobs) {
-        const parsedJobs = JSON.parse(savedJobs);
+        const parsedJobs: Job[] = JSON.parse(savedJobs);
+        
+        // Update all job statuses based on new logic
+        const updatedJobs = parsedJobs.map(job => ({
+          ...job,
+          status: calculateJobStatus(job)
+        }));
+        
         // Sort by most recent first
-        parsedJobs.sort((a: Job, b: Job) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setJobs(parsedJobs);
+        updatedJobs.sort((a: Job, b: Job) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        
+        setJobs(updatedJobs);
+        
+        // Save back the updated statuses
+        await AsyncStorage.setItem('proofly_jobs', JSON.stringify(updatedJobs));
       }
     } catch (error) {
       console.error('Error loading jobs:', error);
@@ -95,9 +122,7 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
     switch (status) {
       case 'created': return '#FF9500';
       case 'in_progress': return '#007AFF';
-      case 'photos_taken': return '#5856D6';
-      case 'signed': return '#34C759';
-      case 'completed': return '#8E8E93';
+      case 'completed': return '#34C759';
       default: return '#FF9500';
     }
   };
@@ -106,11 +131,19 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
     switch (status) {
       case 'created': return 'Created';
       case 'in_progress': return 'In Progress';
-      case 'photos_taken': return 'Photos Taken';
-      case 'signed': return 'Signed';
       case 'completed': return 'Completed';
       default: return 'Created';
     }
+  };
+
+  const getStatusDescription = (job: Job) => {
+    if (job.signature) {
+      return 'Client signed off';
+    }
+    if (job.photos.length > 0) {
+      return `${job.photos.length} photos taken`;
+    }
+    return 'Ready to start';
   };
 
   const renderJobItem = ({ item }: { item: Job }) => (
@@ -131,6 +164,7 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
             <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
           </View>
+          <Text style={styles.statusDescription}>{getStatusDescription(item)}</Text>
           <Text style={styles.date}>
             {new Date(item.createdAt).toLocaleDateString()}
           </Text>
@@ -143,12 +177,16 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
           <Text style={styles.statLabel}>Photos</Text>
         </View>
         <View style={styles.stat}>
-          <Text style={styles.statNumber}>{item.signature ? '✓' : '○'}</Text>
+          <Text style={[styles.statNumber, { color: item.signature ? '#34C759' : '#ccc' }]}>
+            {item.signature ? '✓' : '○'}
+          </Text>
           <Text style={styles.statLabel}>Signature</Text>
         </View>
         <View style={styles.stat}>
-          <Text style={styles.statNumber}>{item.status === 'completed' ? '✓' : '○'}</Text>
-          <Text style={styles.statLabel}>PDF</Text>
+          <Text style={[styles.statNumber, { color: item.status === 'completed' ? '#34C759' : '#ccc' }]}>
+            {item.status === 'completed' ? '✓' : '○'}
+          </Text>
+          <Text style={styles.statLabel}>Complete</Text>
         </View>
         
         {/* Delete indicator */}
@@ -205,7 +243,7 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statCardNumber}>
-              {jobs.filter(job => job.status !== 'completed' && job.status !== 'created').length}
+              {jobs.filter(job => job.status === 'in_progress').length}
             </Text>
             <Text style={styles.statCardLabel}>In Progress</Text>
           </View>
@@ -342,28 +380,22 @@ const styles = StyleSheet.create({
   jobMeta: {
     alignItems: 'flex-end',
   },
-  deleteButtonSmall: {
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 59, 48, 0.3)',
-    marginLeft: 10,
-  },
-  deleteButtonSmallText: {
-    fontSize: 12,
-  },
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   statusText: {
     color: 'white',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  statusDescription: {
+    fontSize: 11,
+    color: '#666',
+    marginBottom: 4,
+    textAlign: 'right',
   },
   date: {
     fontSize: 12,
@@ -401,31 +433,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#ff6b6b',
     fontWeight: '300',
-  },
-  jobActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: '#007AFF',
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  actionButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  deleteButton: {
-    backgroundColor: '#ff3b30',
-    flex: 0.3,
-  },
-  deleteButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
   },
   emptyState: {
     alignItems: 'center',

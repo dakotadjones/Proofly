@@ -12,6 +12,22 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Job } from './HomeScreen';
 import { useFocusEffect } from '@react-navigation/native';
 
+// Helper function to calculate job status based on new logic
+const calculateJobStatus = (job: Job): Job['status'] => {
+  // If has signature, always completed
+  if (job.signature) {
+    return 'completed';
+  }
+  
+  // If has photos but no signature, in progress
+  if (job.photos.length > 0) {
+    return 'in_progress';
+  }
+  
+  // If nothing done yet, created
+  return 'created';
+};
+
 interface JobDetailsScreenProps {
   job: Job;
   onEditJob: (job: Job) => void;
@@ -40,7 +56,20 @@ export default function JobDetailsScreen({
             const updatedJob = jobs.find(j => j.id === job.id);
             if (updatedJob) {
               console.log('Refreshed job with', updatedJob.photos.length, 'photos');
-              setJob(updatedJob);
+              
+              // Update status based on new logic
+              const jobWithUpdatedStatus = {
+                ...updatedJob,
+                status: calculateJobStatus(updatedJob)
+              };
+              
+              setJob(jobWithUpdatedStatus);
+              
+              // Save back the updated status
+              const jobsWithUpdatedStatus = jobs.map(j => 
+                j.id === job.id ? jobWithUpdatedStatus : j
+              );
+              await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobsWithUpdatedStatus));
             }
           }
         } catch (error) {
@@ -56,9 +85,7 @@ export default function JobDetailsScreen({
     switch (status) {
       case 'created': return '#FF9500';
       case 'in_progress': return '#007AFF';
-      case 'photos_taken': return '#5856D6';
-      case 'signed': return '#34C759';
-      case 'completed': return '#8E8E93';
+      case 'completed': return '#34C759';
       default: return '#FF9500';
     }
   };
@@ -67,15 +94,34 @@ export default function JobDetailsScreen({
     switch (status) {
       case 'created': return 'Created';
       case 'in_progress': return 'In Progress';
-      case 'photos_taken': return 'Photos Taken';
-      case 'signed': return 'Signed';
       case 'completed': return 'Completed';
       default: return 'Created';
     }
   };
 
+  const getStatusDescription = () => {
+    if (job.signature) {
+      return 'Client has signed off - job complete!';
+    }
+    if (job.photos.length > 0) {
+      return `${job.photos.length} photos taken - ready for signature`;
+    }
+    return 'Ready to start documentation';
+  };
+
   const canGeneratePDF = () => {
-    return job.photos.length > 0 && job.signature;
+    // Can generate PDF anytime there are photos (progress reports or final reports)
+    return job.photos.length > 0;
+  };
+
+  const getNextStep = () => {
+    if (job.signature) {
+      return 'Job complete! Generate final PDF report.';
+    }
+    if (job.photos.length > 0) {
+      return 'Photos documented. Get client signature to complete job.';
+    }
+    return 'Start by taking photos to document your work.';
   };
 
   const showPhotosPreview = () => {
@@ -107,6 +153,13 @@ export default function JobDetailsScreen({
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(job.status) }]}>
           <Text style={styles.statusText}>{getStatusText(job.status)}</Text>
         </View>
+      </View>
+
+      {/* Status Overview */}
+      <View style={styles.statusOverview}>
+        <Text style={styles.statusOverviewTitle}>Job Status</Text>
+        <Text style={styles.statusOverviewText}>{getStatusDescription()}</Text>
+        <Text style={styles.nextStepText}>{getNextStep()}</Text>
       </View>
 
       {/* Job Information */}
@@ -166,7 +219,7 @@ export default function JobDetailsScreen({
               <Text style={styles.actionIconText}>📸</Text>
             </View>
             <View style={styles.actionInfo}>
-              <Text style={styles.actionTitle}>Photos</Text>
+              <Text style={styles.actionTitle}>Document with Photos</Text>
               <Text style={styles.actionSubtitle}>
                 {job.photos.length > 0 ? `${job.photos.length} photos taken` : 'No photos yet'}
               </Text>
@@ -182,32 +235,10 @@ export default function JobDetailsScreen({
           {showPhotosPreview()}
         </TouchableOpacity>
 
-        {/* Signature Card */}
-        <TouchableOpacity style={styles.actionCard} onPress={() => onGetSignature(job)}>
-          <View style={styles.actionHeader}>
-            <View style={styles.actionIcon}>
-              <Text style={styles.actionIconText}>✍️</Text>
-            </View>
-            <View style={styles.actionInfo}>
-              <Text style={styles.actionTitle}>Client Signature</Text>
-              <Text style={styles.actionSubtitle}>
-                {job.signature ? `Signed by ${job.clientSignedName}` : 'Not signed yet'}
-              </Text>
-            </View>
-            <View style={styles.actionStatus}>
-              {job.signature ? (
-                <Text style={[styles.statusDot, { color: '#34C759' }]}>✓</Text>
-              ) : (
-                <Text style={[styles.statusDot, { color: '#FF9500' }]}>○</Text>
-              )}
-            </View>
-          </View>
-        </TouchableOpacity>
-
         {/* PDF Generation Card */}
         <TouchableOpacity 
           style={[styles.actionCard, !canGeneratePDF() && styles.disabledCard]} 
-          onPress={() => canGeneratePDF() ? onGeneratePDF(job) : Alert.alert('Cannot Generate PDF', 'Please take photos and get client signature first.')}
+          onPress={() => canGeneratePDF() ? onGeneratePDF(job) : Alert.alert('Cannot Generate PDF', 'Please take photos first to document your work.')}
         >
           <View style={styles.actionHeader}>
             <View style={styles.actionIcon}>
@@ -218,16 +249,37 @@ export default function JobDetailsScreen({
                 Generate PDF Report
               </Text>
               <Text style={[styles.actionSubtitle, !canGeneratePDF() && styles.disabledText]}>
-                {canGeneratePDF() ? 'Ready to generate report' : 'Need photos and signature'}
+                {canGeneratePDF() ? 
+                  (job.signature ? 'Generate final report' : 'Generate progress report') : 
+                  'Need photos first'
+                }
               </Text>
             </View>
             <View style={styles.actionStatus}>
-              {job.status === 'completed' ? (
+              <Text style={[styles.statusDot, { color: canGeneratePDF() ? '#007AFF' : '#ccc' }]}>
+                {canGeneratePDF() ? '→' : '○'}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Signature Card */}
+        <TouchableOpacity style={styles.actionCard} onPress={() => onGetSignature(job)}>
+          <View style={styles.actionHeader}>
+            <View style={styles.actionIcon}>
+              <Text style={styles.actionIconText}>✍️</Text>
+            </View>
+            <View style={styles.actionInfo}>
+              <Text style={styles.actionTitle}>Get Client Signature</Text>
+              <Text style={styles.actionSubtitle}>
+                {job.signature ? `Signed by ${job.clientSignedName}` : 'Complete the job'}
+              </Text>
+            </View>
+            <View style={styles.actionStatus}>
+              {job.signature ? (
                 <Text style={[styles.statusDot, { color: '#34C759' }]}>✓</Text>
               ) : (
-                <Text style={[styles.statusDot, { color: canGeneratePDF() ? '#007AFF' : '#ccc' }]}>
-                  {canGeneratePDF() ? '→' : '○'}
-                </Text>
+                <Text style={[styles.statusDot, { color: '#FF9500' }]}>○</Text>
               )}
             </View>
           </View>
@@ -247,7 +299,7 @@ export default function JobDetailsScreen({
               {job.photos.length > 0 ? '✓' : '○'}
             </Text>
             <Text style={[styles.progressText, job.photos.length === 0 && styles.disabledText]}>
-              Photos documented
+              Work documented with photos
             </Text>
           </View>
           <View style={styles.progressItem}>
@@ -256,14 +308,6 @@ export default function JobDetailsScreen({
             </Text>
             <Text style={[styles.progressText, !job.signature && styles.disabledText]}>
               Client signature obtained
-            </Text>
-          </View>
-          <View style={styles.progressItem}>
-            <Text style={[styles.progressDot, { color: job.status === 'completed' ? '#34C759' : '#ccc' }]}>
-              {job.status === 'completed' ? '✓' : '○'}
-            </Text>
-            <Text style={[styles.progressText, job.status !== 'completed' && styles.disabledText]}>
-              PDF report generated
             </Text>
           </View>
         </View>
@@ -305,6 +349,29 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  statusOverview: {
+    backgroundColor: '#f8f9fa',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  statusOverviewTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  statusOverviewText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  nextStepText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '500',
+    fontStyle: 'italic',
   },
   section: {
     backgroundColor: 'white',
