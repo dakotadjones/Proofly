@@ -10,16 +10,19 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.proofly.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.proofly.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
     },
     "plugins": [
       [
@@ -36,6 +39,10 @@
         }
       ],
       "expo-mail-composer"
-    ]
+    ],
+    "newArchEnabled": true,
+    "experiments": {
+      "typedRoutes": false
+    }
   }
 }
