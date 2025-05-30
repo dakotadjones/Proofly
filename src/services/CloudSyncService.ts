@@ -1,4 +1,6 @@
-// services/CloudSyncService.ts
+// src/services/CloudSyncService.ts
+// Updated with file size validation and abuse prevention
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabaseHTTP, getCurrentUser } from './SupabaseHTTPClient';
 import { Job } from '../screens/HomeScreen';
@@ -6,6 +8,7 @@ import { JobPhoto } from '../screens/CameraScreen';
 import { TIER_LIMITS } from '../utils/JobUtils';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
+import { Alert } from 'react-native';
 
 interface SyncResult {
   success: boolean;
@@ -25,6 +28,10 @@ interface PhotoUploadResult {
 class CloudSyncService {
   private syncInProgress = false;
   private lastSyncTime: string | null = null;
+  
+  // CRITICAL: File size limits to prevent abuse
+  private readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB max per photo
+  private readonly TARGET_COMPRESSED_SIZE = 50 * 1024; // Target 50KB after compression
 
   constructor() {
     this.loadLastSyncTime();
@@ -45,6 +52,46 @@ class CloudSyncService {
       await AsyncStorage.setItem('last_sync_time', now);
     } catch (error) {
       console.error('Error saving last sync time:', error);
+    }
+  }
+
+  // CRITICAL: Validate photo before processing
+  private async validatePhoto(uri: string): Promise<{ valid: boolean; error?: string }> {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+      
+      if (!fileInfo.exists) {
+        return { valid: false, error: 'File does not exist' };
+      }
+      
+      if ('size' in fileInfo && fileInfo.size > this.MAX_FILE_SIZE) {
+        return { 
+          valid: false, 
+          error: `File too large (${Math.round(fileInfo.size / 1024 / 1024)}MB). Maximum size is 10MB.` 
+        };
+      }
+
+      // Validate file type by reading header
+      try {
+        const base64Header = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+          length: 10
+        });
+        
+        // Check for JPEG/PNG magic numbers
+        const isJPEG = base64Header.startsWith('/9j/') || base64Header.startsWith('iVBOR');
+        if (!isJPEG) {
+          return { valid: false, error: 'Only JPEG and PNG images are allowed' };
+        }
+      } catch (error) {
+        // If we can't read the header, continue but log warning
+        console.warn('Could not validate file type:', error);
+      }
+
+      return { valid: true };
+    } catch (error) {
+      console.error('Error validating photo:', error);
+      return { valid: false, error: 'Failed to validate file' };
     }
   }
 
@@ -70,19 +117,25 @@ class CloudSyncService {
     }
   }
 
-  // Compress image to reduce storage costs
+  // Compress image more aggressively to reduce storage costs
   private async compressImage(uri: string): Promise<PhotoUploadResult> {
     try {
+      // Validate photo first
+      const validation = await this.validatePhoto(uri);
+      if (!validation.valid) {
+        return { success: false, error: validation.error };
+      }
+
       // Get original file size
       const fileInfo = await FileSystem.getInfoAsync(uri);
       const originalSize = (fileInfo.exists && 'size' in fileInfo) ? fileInfo.size : 0;
 
-      // Compress image - target ~200KB
+      // Aggressive compression - target 50KB
       const manipulatedImage = await ImageManipulator.manipulateAsync(
         uri,
-        [{ resize: { width: 1200 } }], // Resize to max 1200px width
+        [{ resize: { width: 800 } }], // Reduced from 1200px
         {
-          compress: 0.7, // 70% quality
+          compress: 0.5, // Reduced from 0.7
           format: ImageManipulator.SaveFormat.JPEG,
         }
       );
@@ -90,6 +143,31 @@ class CloudSyncService {
       // Check compressed size
       const compressedInfo = await FileSystem.getInfoAsync(manipulatedImage.uri);
       const compressedSize = (compressedInfo.exists && 'size' in compressedInfo) ? compressedInfo.size : 0;
+
+      // If still too large, compress more aggressively
+      if (compressedSize > this.TARGET_COMPRESSED_SIZE * 2) {
+        console.log('File still large, applying additional compression');
+        const secondPass = await ImageManipulator.manipulateAsync(
+          manipulatedImage.uri,
+          [{ resize: { width: 600 } }],
+          {
+            compress: 0.3,
+            format: ImageManipulator.SaveFormat.JPEG,
+          }
+        );
+        
+        const finalInfo = await FileSystem.getInfoAsync(secondPass.uri);
+        const finalSize = (finalInfo.exists && 'size' in finalInfo) ? finalInfo.size : compressedSize;
+        
+        console.log(`Image double-compressed: ${originalSize} -> ${compressedSize} -> ${finalSize} bytes`);
+        
+        return {
+          success: true,
+          path: secondPass.uri,
+          originalSize,
+          compressedSize: finalSize
+        };
+      }
 
       console.log(`Image compressed: ${originalSize} -> ${compressedSize} bytes (${Math.round((1 - compressedSize/originalSize) * 100)}% reduction)`);
 
@@ -126,7 +204,7 @@ class CloudSyncService {
         };
       }
 
-      // Compress image first
+      // Compress image first (includes validation)
       const compressionResult = await this.compressImage(photo.uri);
       if (!compressionResult.success) {
         return compressionResult;
@@ -259,7 +337,7 @@ class CloudSyncService {
         }
       }
 
-      // Upload photos
+      // Upload photos with validation
       let photosSynced = 0;
       let photosFailed = 0;
 
@@ -270,6 +348,14 @@ class CloudSyncService {
         } else {
           photosFailed++;
           console.error(`Failed to upload photo ${photo.id}:`, uploadResult.error);
+          
+          // Show user-friendly error for file validation failures
+          if (uploadResult.error?.includes('too large') || uploadResult.error?.includes('file type')) {
+            Alert.alert(
+              'Photo Upload Failed',
+              `${uploadResult.error}\n\nThis photo will be skipped but your job will still be saved.`
+            );
+          }
         }
       }
 

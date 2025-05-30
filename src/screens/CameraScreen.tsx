@@ -13,6 +13,7 @@ import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import * as ImagePicker from 'expo-image-picker';
 import { generateUUID } from '../utils/JobUtils';
+import { mvpStorageService } from '../services/MVPStorageService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -51,11 +52,46 @@ export default function CameraScreen({
     })();
   }, []);
 
+  // MVP: Check photo limits before taking picture
+  const checkPhotoLimit = async () => {
+    const limitCheck = await mvpStorageService.canAddPhoto(photos.length);
+    if (!limitCheck.allowed) {
+      Alert.alert(
+        'Photo Limit Reached',
+        limitCheck.reason,
+        [
+          { text: 'OK', style: 'cancel' },
+          { 
+            text: 'Upgrade Plan', 
+            onPress: () => {
+              Alert.alert(
+                'Upgrade to Starter Plan', 
+                'Get unlimited photos, 200 jobs, and 2GB storage for just $19/month!\n\nPerfect for growing service businesses.',
+                [
+                  { text: 'Maybe Later', style: 'cancel' },
+                  { text: 'Learn More', onPress: () => {
+                    Alert.alert('Coming Soon!', 'Upgrade flow will be available soon. Contact support for early access.');
+                  }}
+                ]
+              );
+            }
+          }
+        ]
+      );
+      return false;
+    }
+    return true;
+  };
+
   const takePicture = async () => {
     if (!isCameraReady) {
       Alert.alert('Camera Not Ready', 'Please wait for the camera to initialize');
       return;
     }
+
+    // MVP: Check photo limits before taking picture
+    const canAdd = await checkPhotoLimit();
+    if (!canAdd) return;
 
     if (cameraRef.current) {
       try {
@@ -67,7 +103,7 @@ export default function CameraScreen({
           await MediaLibrary.saveToLibraryAsync(photo.uri);
 
           const newPhoto: JobPhoto = {
-            id: generateUUID(), // Using centralized UUID generator
+            id: generateUUID(),
             uri: photo.uri,
             type: activePhotoType,
             timestamp: new Date().toISOString(),
@@ -89,6 +125,10 @@ export default function CameraScreen({
   };
 
   const pickImage = async () => {
+    // MVP: Check photo limits before picking image too
+    const canAdd = await checkPhotoLimit();
+    if (!canAdd) return;
+
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -99,7 +139,7 @@ export default function CameraScreen({
 
       if (!result.canceled && result.assets[0]) {
         const newPhoto: JobPhoto = {
-          id: generateUUID(), // Using centralized UUID generator
+          id: generateUUID(),
           uri: result.assets[0].uri,
           type: activePhotoType,
           timestamp: new Date().toISOString(),

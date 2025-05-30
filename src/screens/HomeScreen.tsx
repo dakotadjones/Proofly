@@ -21,13 +21,19 @@ export interface Job {
   serviceType: string;
   description?: string;
   address: string;
-  status: 'created' | 'in_progress' | 'completed';
+  status: 'created' | 'in_progress' | 'pending_remote_signature' | 'completed';
   createdAt: string;
   photos: Array<{ id: string; uri: string; type: 'before' | 'during' | 'after'; timestamp: string }>;
   signature?: string;
   clientSignedName?: string;
   jobSatisfaction?: string;
   completedAt?: string;
+  remoteSigningData?: {
+    sentTo: string;
+    sentVia: 'email' | 'sms';
+    sentAt: string;
+    requestId?: string;
+  };
 }
 
 interface HomeScreenProps {
@@ -136,8 +142,13 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
           <Text style={styles.statLabel}>Signature</Text>
         </View>
         <View style={styles.stat}>
-          <Text style={[styles.statNumber, { color: item.status === 'completed' ? '#34C759' : '#ccc' }]}>
-            {item.status === 'completed' ? '✓' : '○'}
+          <Text style={[
+            styles.statNumber, 
+            { color: item.status === 'completed' ? '#34C759' : 
+                     item.status === 'pending_remote_signature' ? '#9500FF' : '#ccc' }
+          ]}>
+            {item.status === 'completed' ? '✓' : 
+             item.status === 'pending_remote_signature' ? '⏳' : '○'}
           </Text>
           <Text style={styles.statLabel}>Complete</Text>
         </View>
@@ -199,6 +210,12 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
             </Text>
             <Text style={styles.statCardLabel}>In Progress</Text>
           </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statCardNumber}>
+              {jobs.filter(job => job.status === 'pending_remote_signature').length}
+            </Text>
+            <Text style={styles.statCardLabel}>Awaiting Approval</Text>
+          </View>
         </View>
       )}
 
@@ -259,12 +276,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 15,
     paddingVertical: 15,
-    gap: 10,
+    gap: 8,
   },
   statCard: {
     flex: 1,
     backgroundColor: 'white',
-    padding: 15,
+    padding: 12,
     borderRadius: 10,
     alignItems: 'center',
     shadowColor: '#000',
@@ -274,14 +291,15 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   statCardNumber: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#007AFF',
   },
   statCardLabel: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#666',
     marginTop: 4,
+    textAlign: 'center',
   },
   listContainer: {
     padding: 15,

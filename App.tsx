@@ -19,6 +19,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import { getCurrentUser, supabaseHTTP } from './src/services/SupabaseHTTPClient';
 import { cloudSyncService } from './src/services/CloudSyncService';
 import { migrationService } from './src/services/MigrationService';
+import { remoteSigningService } from './src/services/RemoteSigningService';
 
 // Import utilities
 import { generateUUID, calculateJobStatus } from './src/utils/JobUtils';
@@ -407,30 +408,83 @@ function SignatureScreenWithNav({ route, navigation }: any) {
 
   const handleJobComplete = async (signatureData: any) => {
     try {
-      const updatedJob: Job = {
-        ...job,
-        ...signatureData,
-        status: 'completed' as const,
-        completedAt: new Date().toISOString(),
-      };
+      if (signatureData.completionMethod === 'remote') {
+        // Handle remote signing initiation
+        console.log('Remote signing initiated:', signatureData.remoteSigningData);
+        
+        // Create remote signing request
+        try {
+          const result = await remoteSigningService.createRemoteSigningRequest(
+            job,
+            signatureData.remoteSigningData.sentVia,
+            signatureData.remoteSigningData.sentTo
+          );
 
-      const savedJobs = await AsyncStorage.getItem('proofly_jobs');
-      const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
-      const jobIndex = jobs.findIndex(j => j.id === job.id);
-      
-      if (jobIndex !== -1) {
-        jobs[jobIndex] = updatedJob;
-        await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
+          if (!result.success) {
+            Alert.alert('Error', `Failed to send remote signing request: ${result.error}`);
+            return;
+          }
+
+          console.log('Remote signing request created successfully:', result.requestId);
+        } catch (error) {
+          console.warn('Remote signing service failed, continuing with basic flow:', error);
+        }
+        
+        // Update job status to pending remote signature
+        const updatedJob: Job = {
+          ...job,
+          status: 'pending_remote_signature' as const,
+          remoteSigningData: signatureData.remoteSigningData,
+        };
+
+        // Save to storage
+        const savedJobs = await AsyncStorage.getItem('proofly_jobs');
+        const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
+        const jobIndex = jobs.findIndex(j => j.id === job.id);
+        
+        if (jobIndex !== -1) {
+          jobs[jobIndex] = updatedJob;
+          await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
+        }
+
+        // Try cloud sync
+        try {
+          const user = await getCurrentUser();
+          if (user) cloudSyncService.autoSyncJob(updatedJob);
+        } catch (error) {
+          console.log('Remote signing sync failed, continuing offline:', error);
+        }
+        
+        // Navigate back to job details
+        navigation.navigate('JobDetails', { job: updatedJob });
+
+      } else {
+        // Handle in-person signing (existing logic)
+        const updatedJob: Job = {
+          ...job,
+          ...signatureData,
+          status: 'completed' as const,
+          completedAt: new Date().toISOString(),
+        };
+
+        const savedJobs = await AsyncStorage.getItem('proofly_jobs');
+        const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
+        const jobIndex = jobs.findIndex(j => j.id === job.id);
+        
+        if (jobIndex !== -1) {
+          jobs[jobIndex] = updatedJob;
+          await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
+        }
+
+        try {
+          const user = await getCurrentUser();
+          if (user) cloudSyncService.autoSyncJob(updatedJob);
+        } catch (error) {
+          console.log('Signature sync failed, continuing offline:', error);
+        }
+
+        navigation.navigate('JobDetails', { job: updatedJob });
       }
-
-      try {
-        const user = await getCurrentUser();
-        if (user) cloudSyncService.autoSyncJob(updatedJob);
-      } catch (error) {
-        console.log('Signature sync failed, continuing offline:', error);
-      }
-
-      navigation.navigate('JobDetails', { job: updatedJob });
     } catch (error) {
       console.error('Error updating job with signature:', error);
       Alert.alert('Error', 'Failed to save signature. Please try again.');
@@ -439,6 +493,8 @@ function SignatureScreenWithNav({ route, navigation }: any) {
 
   return <SimpleSignatureScreen 
     clientName={job.clientName}
+    clientEmail={job.clientEmail}
+    clientPhone={job.clientPhone}
     photos={job.photos}
     onJobComplete={handleJobComplete}
   />;
@@ -577,7 +633,7 @@ export default function App() {
               <Stack.Screen name="JobDetails" component={JobDetailsScreenWithNav} options={{ title: 'Job Details' }} />
               <Stack.Screen name="CreateJob" component={CreateJobScreenWithNav} options={({ route }: any) => ({ title: route.params?.editJob ? 'Edit Job' : 'New Job' })} />
               <Stack.Screen name="Camera" component={CameraScreenWithNav} options={{ title: 'Take Photos' }} />
-              <Stack.Screen name="Signature" component={SignatureScreenWithNav} options={{ title: 'Client Signature' }} />
+              <Stack.Screen name="Signature" component={SignatureScreenWithNav} options={{ title: 'Complete Job' }} />
               <Stack.Screen name="PDFGenerator" component={PDFGeneratorWithNav} options={{ title: 'Generate Report' }} />
               <Stack.Screen name="Profile" component={ProfileScreenWithSignOut} options={{ title: 'Profile' }} />
             </>

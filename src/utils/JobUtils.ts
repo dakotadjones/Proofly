@@ -1,4 +1,5 @@
-// src/utils/jobUtils.ts
+// src/utils/JobUtils.ts - Updated with remote signing support
+
 import { Job } from '../screens/HomeScreen';
 
 // Simple UUID generator - centralized
@@ -10,9 +11,10 @@ export const generateUUID = (): string => {
   });
 };
 
-// Centralized job status calculation
+// Centralized job status calculation with remote signing support
 export const calculateJobStatus = (job: Job): Job['status'] => {
   if (job.signature) return 'completed';
+  if (job.remoteSigningData) return 'pending_remote_signature';
   if (job.photos && job.photos.length > 0) return 'in_progress';
   return 'created';
 };
@@ -28,11 +30,12 @@ export const migrateToUUID = (id: string): string => {
   return isValidUUID(id) ? id : generateUUID();
 };
 
-// Job status helpers
+// Enhanced job status helpers with remote signing
 export const getStatusColor = (status: Job['status']): string => {
   switch (status) {
     case 'created': return '#FF9500';
     case 'in_progress': return '#007AFF';
+    case 'pending_remote_signature': return '#9500FF'; // Purple for pending remote
     case 'completed': return '#34C759';
     default: return '#FF9500';
   }
@@ -42,6 +45,7 @@ export const getStatusText = (status: Job['status']): string => {
   switch (status) {
     case 'created': return 'Created';
     case 'in_progress': return 'In Progress';
+    case 'pending_remote_signature': return 'Awaiting Approval';
     case 'completed': return 'Completed';
     default: return 'Created';
   }
@@ -49,11 +53,62 @@ export const getStatusText = (status: Job['status']): string => {
 
 export const getStatusDescription = (job: Job): string => {
   if (job.signature) return 'Client signed off';
+  if (job.remoteSigningData) {
+    const method = job.remoteSigningData.sentVia === 'email' ? 'email' : 'text';
+    return `Review ${method} sent to client`;
+  }
   if (job.photos && job.photos.length > 0) return `${job.photos.length} photos taken`;
   return 'Ready to start';
 };
 
-// Subscription tier helpers
+// New helper for remote signing status
+export const getRemoteSigningStatus = (job: Job): {
+  isPending: boolean;
+  method?: 'email' | 'sms';
+  sentTo?: string;
+  sentAt?: Date;
+  timeElapsed?: string;
+} => {
+  if (!job.remoteSigningData) {
+    return { isPending: false };
+  }
+
+  const sentAt = new Date(job.remoteSigningData.sentAt);
+  const now = new Date();
+  const hoursElapsed = Math.floor((now.getTime() - sentAt.getTime()) / (1000 * 60 * 60));
+  
+  let timeElapsed = '';
+  if (hoursElapsed < 1) {
+    const minutesElapsed = Math.floor((now.getTime() - sentAt.getTime()) / (1000 * 60));
+    timeElapsed = `${minutesElapsed} minutes ago`;
+  } else if (hoursElapsed < 24) {
+    timeElapsed = `${hoursElapsed} hours ago`;
+  } else {
+    const daysElapsed = Math.floor(hoursElapsed / 24);
+    timeElapsed = `${daysElapsed} days ago`;
+  }
+
+  return {
+    isPending: true,
+    method: job.remoteSigningData.sentVia,
+    sentTo: job.remoteSigningData.sentTo,
+    sentAt,
+    timeElapsed
+  };
+};
+
+// Check if remote signing has expired (48 hours)
+export const isRemoteSigningExpired = (job: Job): boolean => {
+  if (!job.remoteSigningData) return false;
+  
+  const sentAt = new Date(job.remoteSigningData.sentAt);
+  const now = new Date();
+  const hoursElapsed = (now.getTime() - sentAt.getTime()) / (1000 * 60 * 60);
+  
+  return hoursElapsed > 48;
+};
+
+// Subscription tier helpers (existing)
 export const TIER_LIMITS = {
   free: { maxJobs: 20, cloudBackup: true, teamSize: 1 },
   starter: { maxJobs: 200, cloudBackup: true, teamSize: 1 },
@@ -84,9 +139,9 @@ export const getTierColor = (tier: string): string => {
 export const getTierLimits = (tier: string): string => {
   switch (tier) {
     case 'free': return '20 jobs total';
-    case 'starter': return '200 jobs total';
-    case 'professional': return 'Unlimited jobs';
-    case 'business': return 'Unlimited jobs + teams';
+    case 'starter': return '200 jobs total + Remote signing';
+    case 'professional': return 'Unlimited jobs + Advanced features';
+    case 'business': return 'Unlimited jobs + Teams + Priority support';
     default: return '20 jobs total';
   }
 };

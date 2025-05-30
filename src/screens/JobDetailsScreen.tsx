@@ -11,7 +11,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Job } from './HomeScreen';
 import { useFocusEffect } from '@react-navigation/native';
-import { calculateJobStatus, getStatusColor, getStatusText, getStatusDescription } from '../utils/JobUtils';
+import { calculateJobStatus, getStatusColor, getStatusText, getStatusDescription, getRemoteSigningStatus, isRemoteSigningExpired } from '../utils/JobUtils';
+import { remoteSigningService } from '../services/RemoteSigningService';
 
 interface JobDetailsScreenProps {
   job: Job;
@@ -70,9 +71,22 @@ export default function JobDetailsScreen({
     if (job.signature) {
       return 'Job complete! Generate final PDF report.';
     }
-    if (job.photos.length > 0) {
-      return 'Photos documented. Get client signature to complete job.';
+    
+    if (job.remoteSigningData) {
+      const remoteStatus = getRemoteSigningStatus(job);
+      const isExpired = isRemoteSigningExpired(job);
+      
+      if (isExpired) {
+        return 'Remote approval expired. You can complete the job manually or resend approval request.';
+      }
+      
+      return `Waiting for client approval via ${remoteStatus.method}. Sent ${remoteStatus.timeElapsed}.`;
     }
+    
+    if (job.photos.length > 0) {
+      return 'Photos documented. Get client signature or send remote approval request.';
+    }
+    
     return 'Start by taking photos to document your work.';
   };
 
@@ -164,6 +178,106 @@ export default function JobDetailsScreen({
           </View>
         </View>
       </View>
+
+      {/* Remote Approval Status */}
+      {job.remoteSigningData && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📱 Remote Approval Status</Text>
+          
+          <View style={styles.remoteStatusCard}>
+            <View style={styles.remoteStatusHeader}>
+              <Text style={styles.remoteStatusTitle}>
+                {job.signature ? '✅ Approved' : '⏳ Waiting for Client'}
+              </Text>
+              <Text style={styles.remoteStatusSubtitle}>
+                {(() => {
+                  const remoteStatus = getRemoteSigningStatus(job);
+                  const isExpired = isRemoteSigningExpired(job);
+                  
+                  if (job.signature) {
+                    return `Approved by ${job.clientSignedName}`;
+                  } else if (isExpired) {
+                    return 'Link expired (48 hours)';
+                  } else {
+                    return `Sent ${remoteStatus.timeElapsed} via ${remoteStatus.method}`;
+                  }
+                })()}
+              </Text>
+            </View>
+            
+            <View style={styles.remoteStatusDetails}>
+              <View style={styles.remoteStatusItem}>
+                <Text style={styles.remoteStatusLabel}>Sent to:</Text>
+                <Text style={styles.remoteStatusValue}>
+                  {job.remoteSigningData.sentTo}
+                </Text>
+              </View>
+              
+              <View style={styles.remoteStatusItem}>
+                <Text style={styles.remoteStatusLabel}>Method:</Text>
+                <Text style={styles.remoteStatusValue}>
+                  {job.remoteSigningData.sentVia === 'email' ? '📧 Email' : '💬 SMS'}
+                </Text>
+              </View>
+              
+              <View style={styles.remoteStatusItem}>
+                <Text style={styles.remoteStatusLabel}>Expires:</Text>
+                <Text style={styles.remoteStatusValue}>
+                  {(() => {
+                    const sentAt = new Date(job.remoteSigningData.sentAt);
+                    const expiresAt = new Date(sentAt.getTime() + 48 * 60 * 60 * 1000);
+                    return expiresAt.toLocaleDateString() + ' at ' + expiresAt.toLocaleTimeString();
+                  })()}
+                </Text>
+              </View>
+            </View>
+            
+            {!job.signature && (
+              <View style={styles.remoteStatusActions}>
+                {isRemoteSigningExpired(job) ? (
+                  <>
+                    <TouchableOpacity 
+                      style={styles.remoteActionButton}
+                      onPress={() => {
+                        Alert.alert(
+                          'Resend Approval Request',
+                          'Would you like to send a new approval request to the client?',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Resend', onPress: () => onGetSignature(job) }
+                          ]
+                        );
+                      }}
+                    >
+                      <Text style={styles.remoteActionButtonText}>🔄 Resend Request</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      style={[styles.remoteActionButton, styles.remoteActionButtonSecondary]}
+                      onPress={() => onGetSignature(job)}
+                    >
+                      <Text style={styles.remoteActionButtonTextSecondary}>✍️ Get In-Person Signature</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity 
+                    style={styles.remoteActionButton}
+                    onPress={() => {
+                      Alert.alert(
+                        'Reminder Sent',
+                        'A reminder has been sent to the client.',
+                        [{ text: 'OK' }]
+                      );
+                    }}
+                  >
+                    <Text style={styles.remoteActionButtonText}>📞 Send Reminder</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Action Cards */}
       <View style={styles.actionsContainer}>
@@ -259,10 +373,10 @@ export default function JobDetailsScreen({
             </Text>
           </View>
           <View style={styles.progressItem}>
-            <Text style={[styles.progressDot, { color: job.signature ? '#34C759' : '#ccc' }]}>
-              {job.signature ? '✓' : '○'}
+            <Text style={[styles.progressDot, { color: job.signature ? '#34C759' : job.remoteSigningData ? '#9500FF' : '#ccc' }]}>
+              {job.signature ? '✓' : job.remoteSigningData ? '⏳' : '○'}
             </Text>
-            <Text style={[styles.progressText, !job.signature && styles.disabledText]}>
+            <Text style={[styles.progressText, !job.signature && !job.remoteSigningData && styles.disabledText]}>
               Client signature obtained
             </Text>
           </View>
@@ -381,6 +495,73 @@ const styles = StyleSheet.create({
     color: '#333',
     flex: 1,
     textAlign: 'right',
+  },
+  // Remote Status Styles
+  remoteStatusCard: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  remoteStatusHeader: {
+    marginBottom: 16,
+  },
+  remoteStatusTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  remoteStatusSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  remoteStatusDetails: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  remoteStatusItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  remoteStatusLabel: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  remoteStatusValue: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+  },
+  remoteStatusActions: {
+    gap: 8,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e9ecef',
+  },
+  remoteActionButton: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  remoteActionButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  remoteActionButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  remoteActionButtonTextSecondary: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   actionsContainer: {
     paddingHorizontal: 15,
