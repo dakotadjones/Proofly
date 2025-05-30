@@ -1,20 +1,16 @@
-// screens/AuthScreen.tsx
-// Updated to use the new SupabaseHTTPClient instead of official SDK
-
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
   Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
 } from 'react-native';
 import { supabase } from '../services/SupabaseHTTPClient';
+import { Colors, Typography, Spacing, Sizes } from '../theme';
+import { Input, Button, Wrapper } from '../components/ui';
 
 interface AuthScreenProps {
   onAuthSuccess: () => void;
@@ -181,11 +177,11 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
   return (
     <KeyboardAvoidingView 
-      style={styles.container} 
+      style={styles.Wrapper} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView 
-        contentContainerStyle={styles.scrollContainer}
+        contentContainerStyle={styles.scrollWrapper}
         keyboardShouldPersistTaps="handled"
       >
         {/* Header */}
@@ -202,122 +198,103 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         </View>
 
         {/* Form */}
-        <View style={styles.form}>
+        <Wrapper variant="elevated" style={styles.formWrapper}>
           {isSignUp && (
             <>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Full Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Your full name"
-                  value={formData.fullName}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, fullName: text }))}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                  editable={!loading}
-                />
-              </View>
+              <Input
+                label="Full Name"
+                placeholder="Your full name"
+                value={formData.fullName}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, fullName: text }))}
+                autoCapitalize="words"
+                autoCorrect={false}
+                editable={!loading}
+                required
+              />
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Company Name</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Your company name (optional)"
-                  value={formData.companyName}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, companyName: text }))}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                  editable={!loading}
-                />
-              </View>
+              <Input
+                label="Company Name"
+                placeholder="Your company name (optional)"
+                value={formData.companyName}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, companyName: text }))}
+                autoCapitalize="words"
+                autoCorrect={false}
+                editable={!loading}
+              />
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Phone Number</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="(555) 123-4567"
-                  value={formData.phone}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
-                  keyboardType="phone-pad"
-                  autoCorrect={false}
-                  editable={!loading}
-                />
-              </View>
+              <Input
+                label="Phone Number"
+                placeholder="(555) 123-4567"
+                value={formData.phone}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
+                keyboardType="phone-pad"
+                autoCorrect={false}
+                editable={!loading}
+              />
             </>
           )}
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email Address *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="your@email.com"
-              value={formData.email}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="email"
-              editable={!loading}
-            />
-          </View>
+          <Input
+            label="Email Address"
+            placeholder="your@email.com"
+            value={formData.email}
+            onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            editable={!loading}
+            required
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Minimum 6 characters"
-              value={formData.password}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="password"
-              editable={!loading}
-            />
-          </View>
+          <Input
+            label="Password"
+            placeholder="Minimum 6 characters"
+            value={formData.password}
+            onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="password"
+            editable={!loading}
+            required
+          />
 
           {/* Primary Action Button */}
-          <TouchableOpacity
-            style={[styles.primaryButton, loading && styles.primaryButtonDisabled]}
+          <Button
+            variant="primary"
             onPress={isSignUp ? signUp : signIn}
             disabled={loading}
+            loading={loading}
+            style={styles.primaryButton}
           >
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator color="white" size="small" />
-                <Text style={styles.primaryButtonText}>
-                  {isSignUp ? 'Creating Account...' : 'Signing In...'}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.primaryButtonText}>
-                {isSignUp ? 'Create Account' : 'Sign In'}
-              </Text>
-            )}
-          </TouchableOpacity>
+            {isSignUp ? 'Create Account' : 'Sign In'}
+          </Button>
 
           {/* Forgot Password */}
           {!isSignUp && (
-            <TouchableOpacity 
-              style={styles.forgotPassword} 
+            <Button 
+              variant="ghost" 
               onPress={resetPassword}
               disabled={loading}
+              style={styles.forgotButton}
+              textStyle={styles.forgotButtonText}
             >
-              <Text style={[styles.forgotPasswordText, loading && styles.disabledText]}>
-                Forgot Password?
-              </Text>
-            </TouchableOpacity>
+              Forgot Password?
+            </Button>
           )}
 
           {/* Clear Form Button (for testing) */}
           {__DEV__ && (
-            <TouchableOpacity 
-              style={styles.clearButton} 
+            <Button 
+              variant="outline" 
               onPress={clearForm}
               disabled={loading}
+              style={styles.clearButton}
+              size="small"
             >
-              <Text style={styles.clearButtonText}>Clear Form (Dev)</Text>
-            </TouchableOpacity>
+              Clear Form (Dev)
+            </Button>
           )}
 
           {/* Switch Mode */}
@@ -325,20 +302,25 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             <Text style={styles.switchModeText}>
               {isSignUp ? 'Already have an account?' : "Don't have an account?"}
             </Text>
-            <TouchableOpacity onPress={switchMode} disabled={loading}>
-              <Text style={[styles.switchModeLink, loading && styles.disabledText]}>
-                {isSignUp ? 'Sign In' : 'Sign Up'}
-              </Text>
-            </TouchableOpacity>
+            <Button 
+              variant="ghost" 
+              onPress={switchMode} 
+              disabled={loading}
+              size="small"
+              style={styles.switchButton}
+              textStyle={styles.switchButtonText}
+            >
+              {isSignUp ? 'Sign In' : 'Sign Up'}
+            </Button>
           </View>
-        </View>
+        </Wrapper>
 
         {/* Free Trial Info */}
         {isSignUp && (
-          <View style={styles.trialInfo}>
+          <Wrapper variant="flat" style={styles.trialWrapper}>
             <Text style={styles.trialTitle}>🎉 Start with 20 Free Jobs!</Text>
             <Text style={styles.trialText}>
-              No credit card required. Full access to all features including cloud backup, 
+              No credit Wrapper required. Full access to all features including cloud backup, 
               photo documentation, digital signatures, and PDF reports.
             </Text>
             <View style={styles.featureList}>
@@ -348,19 +330,20 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
               <Text style={styles.featureItem}>✅ Digital signatures</Text>
               <Text style={styles.featureItem}>✅ Cloud backup & sync</Text>
             </View>
-          </View>
+          </Wrapper>
         )}
 
         {/* Connection Status (for debugging) */}
         {__DEV__ && (
-          <View style={styles.debugInfo}>
+          <Wrapper variant="flat" style={styles.debugWrapper}>
+            <Text style={styles.debugTitle}>Debug Info</Text>
             <Text style={styles.debugText}>
               Environment: {process.env.EXPO_PUBLIC_APP_ENV || 'unknown'}
             </Text>
             <Text style={styles.debugText}>
               Supabase URL: {process.env.EXPO_PUBLIC_SUPABASE_URL ? 'configured' : 'missing'}
             </Text>
-          </View>
+          </Wrapper>
         )}
       </ScrollView>
     </KeyboardAvoidingView>
@@ -368,172 +351,115 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  Wrapper: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: Colors.background,
   },
-  scrollContainer: {
+  scrollWrapper: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: Spacing.screenPadding,
     minHeight: '100%',
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: Spacing.xxl,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+    ...Typography.display,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
+    ...Typography.body,
+    color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
-    paddingHorizontal: 20,
+    paddingHorizontal: Spacing.lg,
   },
-  form: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginBottom: 20,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-    borderRadius: 8,
-    padding: 16,
-    fontSize: 16,
-    color: '#333',
+  formWrapper: {
+    marginBottom: Spacing.lg,
   },
   primaryButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 10,
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    marginTop: Spacing.md,
   },
-  primaryButtonDisabled: {
-    backgroundColor: '#ccc',
-    shadowOpacity: 0,
-    elevation: 0,
+  forgotButton: {
+    marginTop: Spacing.md,
+    alignSelf: 'center',
   },
-  primaryButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  forgotPassword: {
-    alignItems: 'center',
-    marginTop: 16,
-    padding: 8,
-  },
-  forgotPasswordText: {
-    color: '#007AFF',
-    fontSize: 16,
-    fontWeight: '500',
+  forgotButtonText: {
+    color: Colors.primary,
   },
   clearButton: {
-    alignItems: 'center',
-    marginTop: 12,
-    padding: 8,
-  },
-  clearButtonText: {
-    color: '#FF9500',
-    fontSize: 14,
-    fontWeight: '500',
+    marginTop: Spacing.sm,
+    alignSelf: 'center',
   },
   switchMode: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 24,
-    paddingTop: 24,
+    marginTop: Spacing.xl,
+    paddingTop: Spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
+    borderTopColor: Colors.borderLight,
   },
   switchModeText: {
-    color: '#666',
-    fontSize: 16,
-    marginRight: 4,
+    ...Typography.body,
+    color: Colors.textSecondary,
+    marginRight: Spacing.xs,
   },
-  switchModeLink: {
-    color: '#007AFF',
-    fontSize: 16,
+  switchButton: {
+    paddingHorizontal: 0,
+  },
+  switchButtonText: {
+    color: Colors.primary,
     fontWeight: '600',
   },
-  disabledText: {
-    color: '#ccc',
-  },
-  trialInfo: {
-    backgroundColor: '#e8f5e8',
-    borderRadius: 12,
-    padding: 20,
+  trialWrapper: {
+    backgroundColor: Colors.secondaryLight,
+    borderColor: Colors.secondary,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
   },
   trialTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2d5a2d',
-    marginBottom: 8,
+    ...Typography.h4,
+    color: Colors.secondary,
+    marginBottom: Spacing.sm,
     textAlign: 'center',
   },
   trialText: {
-    fontSize: 14,
-    color: '#2d5a2d',
+    ...Typography.bodySmall,
+    color: Colors.secondary,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: Spacing.md,
+    opacity: 0.8,
   },
   featureList: {
     alignItems: 'flex-start',
     width: '100%',
   },
   featureItem: {
-    fontSize: 14,
-    color: '#2d5a2d',
-    marginBottom: 4,
+    ...Typography.bodySmall,
+    color: Colors.secondary,
+    marginBottom: Spacing.xs,
     fontWeight: '500',
+    opacity: 0.9,
   },
-  debugInfo: {
-    backgroundColor: '#fff3cd',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 10,
+  debugWrapper: {
+    backgroundColor: Colors.warning + '15',
+    borderColor: Colors.warning,
+  },
+  debugTitle: {
+    ...Typography.label,
+    color: Colors.warning,
+    marginBottom: Spacing.sm,
   },
   debugText: {
-    fontSize: 12,
-    color: '#856404',
+    ...Typography.caption,
+    color: Colors.warning,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginBottom: Spacing.xs,
   },
 });

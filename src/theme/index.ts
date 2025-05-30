@@ -16,7 +16,7 @@ export const Colors = {
   pending: '#F59E0B',      // Orange - needs attention
   inProgress: '#3B82F6',   // Blue - actively working
   completed: '#10B981',    // Green - finished work
-  signed: '#8B5CF6',       // Purple - signed/approved
+  signed: '#8B5CF6',       // Purple - signed/approved/remote pending
   cancelled: '#EF4444',    // Red - cancelled/failed
   
   // Semantic Colors
@@ -166,7 +166,7 @@ export const Spacing = {
   // Component-specific spacing
   inputPadding: 16,     // Internal padding for inputs
   buttonPadding: 16,    // Internal padding for buttons
-  cardPadding: 20,      // Internal padding for cards
+  cardPadding: 20,      // Internal padding for cards/Wrappers
   screenPadding: 20,    // Screen edge padding
   listItemPadding: 16,  // List item internal padding
   
@@ -198,61 +198,38 @@ export const Sizes = {
   radiusLarge: 12,   // Large cards, modals
   radiusXL: 16,      // Very large elements
   radiusFull: 9999,  // Circular elements
-  
-  // Shadows (professional depth)
-  shadowSmall: {
-    shadowColor: Colors.gray900,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  shadowMedium: {
-    shadowColor: Colors.gray900,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  shadowLarge: {
-    shadowColor: Colors.gray900,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-  },
 };
 
-// Job Status Styling (Consistent across all screens)
+// Job Status Styling (Updated to match your actual job statuses)
 export const JobStatusStyles = {
-  pending: {
-    backgroundColor: Colors.pending + '15', // 15% opacity
-    borderColor: Colors.pending + '30',
-    color: Colors.pending,
+  created: {
+    backgroundColor: Colors.warning + '15',
+    borderColor: Colors.warning + '30',
+    color: Colors.warning,
     icon: 'clock',
   },
-  inProgress: {
-    backgroundColor: Colors.inProgress + '15',
-    borderColor: Colors.inProgress + '30',
-    color: Colors.inProgress,
+  in_progress: {
+    backgroundColor: Colors.primary + '15',
+    borderColor: Colors.primary + '30',
+    color: Colors.primary,
     icon: 'play-circle',
   },
-  completed: {
-    backgroundColor: Colors.completed + '15',
-    borderColor: Colors.completed + '30',
-    color: Colors.completed,
-    icon: 'check-circle',
-  },
-  signed: {
+  pending_remote_signature: {
     backgroundColor: Colors.signed + '15',
     borderColor: Colors.signed + '30',
     color: Colors.signed,
-    icon: 'edit-3',
+    icon: 'clock',
+  },
+  completed: {
+    backgroundColor: Colors.success + '15',
+    borderColor: Colors.success + '30',
+    color: Colors.success,
+    icon: 'check-circle',
   },
   cancelled: {
-    backgroundColor: Colors.cancelled + '15',
-    borderColor: Colors.cancelled + '30',
-    color: Colors.cancelled,
+    backgroundColor: Colors.error + '15',
+    borderColor: Colors.error + '30',
+    color: Colors.error,
     icon: 'x-circle',
   },
 };
@@ -317,36 +294,11 @@ export const InputStyles = {
   },
 };
 
-// Card Styles (Professional elevation)
-export const CardStyles = {
-  default: {
-    backgroundColor: Colors.surface,
-    borderColor: Colors.border,
-    borderWidth: 1,
-    borderRadius: Sizes.radiusMedium,
-    padding: Spacing.cardPadding,
-    ...Sizes.shadowSmall,
-  },
-  elevated: {
-    backgroundColor: Colors.surface,
-    borderColor: 'transparent',
-    borderWidth: 0,
-    borderRadius: Sizes.radiusMedium,
-    padding: Spacing.cardPadding,
-    ...Sizes.shadowMedium,
-  },
-  flat: {
-    backgroundColor: Colors.surface,
-    borderColor: Colors.border,
-    borderWidth: 1,
-    borderRadius: Sizes.radiusMedium,
-    padding: Spacing.cardPadding,
-  },
-};
+// Card Styles (Removed - handled directly in Card component to avoid style conflicts)
 
 // Helper Functions
 export const getJobStatusStyle = (status: string) => {
-  return JobStatusStyles[status as keyof typeof JobStatusStyles] || JobStatusStyles.pending;
+  return JobStatusStyles[status as keyof typeof JobStatusStyles] || JobStatusStyles.created;
 };
 
 export const getButtonStyle = (variant: string) => {
@@ -369,7 +321,6 @@ export const Theme = {
   jobStatus: JobStatusStyles,
   button: ButtonStyles,
   input: InputStyles,
-  card: CardStyles,
   helpers: {
     getJobStatusStyle,
     getButtonStyle,

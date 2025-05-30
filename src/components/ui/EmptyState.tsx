@@ -1,7 +1,6 @@
 // src/components/ui/EmptyState.tsx
 import React from 'react';
 import { View, Text, ViewStyle, TextStyle } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Colors, Typography, Spacing, Sizes } from '../../theme';
 import { Button } from './Button';
 
@@ -15,7 +14,7 @@ interface EmptyStateProps {
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
-  icon = 'Inbox',
+  icon = '📋',
   title,
   description,
   actionText,
@@ -29,11 +28,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     ...style,
   };
 
+  const iconStyle: TextStyle = {
+    fontSize: Sizes.iconXL,
+    marginBottom: Spacing.lg,
+  };
+
   const titleStyle: TextStyle = {
     ...Typography.h3,
     color: Colors.textPrimary,
     textAlign: 'center',
-    marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   };
 
@@ -47,11 +50,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
   return (
     <View style={containerStyle}>
-      <Icon 
-        name={icon}
-        size={Sizes.iconXL} 
-        color={Colors.gray400}
-      />
+      <Text style={iconStyle}>{icon}</Text>
       <Text style={titleStyle}>{title}</Text>
       {description && (
         <Text style={descriptionStyle}>{description}</Text>

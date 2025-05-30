@@ -1,10 +1,12 @@
 import React from 'react';
 import { View, Text, ViewStyle, TextStyle } from 'react-native';
-import * as Lucide from 'lucide-react';
-import { Colors, Typography, Sizes, Spacing, getJobStatusStyle } from '../../theme';
+import { Colors, Typography, Sizes, Spacing } from '../../theme';
+
+// Match your actual job status types
+type JobStatus = 'created' | 'in_progress' | 'pending_remote_signature' | 'completed';
 
 interface JobStatusBadgeProps {
-  status: 'pending' | 'inProgress' | 'completed' | 'signed' | 'cancelled';
+  status: JobStatus;
   showIcon?: boolean;
   size?: 'small' | 'medium';
   style?: ViewStyle;
@@ -16,13 +18,67 @@ export const JobStatusBadge: React.FC<JobStatusBadgeProps> = ({
   size = 'medium',
   style,
 }) => {
-  const statusStyle = getJobStatusStyle(status);
-  
+  const getStatusStyle = (status: JobStatus) => {
+    switch (status) {
+      case 'created':
+        return {
+          backgroundColor: Colors.warning + '15',
+          borderColor: Colors.warning + '30',
+          color: Colors.warning,
+          icon: '○',
+        };
+      case 'in_progress':
+        return {
+          backgroundColor: Colors.primary + '15',
+          borderColor: Colors.primary + '30',
+          color: Colors.primary,
+          icon: '▶',
+        };
+      case 'pending_remote_signature':
+        return {
+          backgroundColor: Colors.signed + '15',
+          borderColor: Colors.signed + '30',
+          color: Colors.signed,
+          icon: '⏳',
+        };
+      case 'completed':
+        return {
+          backgroundColor: Colors.success + '15',
+          borderColor: Colors.success + '30',
+          color: Colors.success,
+          icon: '✓',
+        };
+      default:
+        return {
+          backgroundColor: Colors.gray200,
+          borderColor: Colors.gray300,
+          color: Colors.gray600,
+          icon: '○',
+        };
+    }
+  };
+
+  const getStatusText = (status: JobStatus): string => {
+    switch (status) {
+      case 'created':
+        return 'Created';
+      case 'in_progress':
+        return 'In Progress';
+      case 'pending_remote_signature':
+        return 'Awaiting Approval';
+      case 'completed':
+        return 'Completed';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  const statusStyle = getStatusStyle(status);
   const badgeHeight = size === 'small' ? 24 : 32;
   const iconSize = size === 'small' ? 12 : 16;
   const fontSize = size === 'small' ? 10 : Typography.badge.fontSize;
 
-  const containerStyle: ViewStyle = {
+  const WrapperStyle: ViewStyle = {
     flexDirection: 'row',
     alignItems: 'center',
     height: badgeHeight,
@@ -35,46 +91,27 @@ export const JobStatusBadge: React.FC<JobStatusBadgeProps> = ({
     ...style,
   };
 
+  const iconStyle: TextStyle = {
+    fontSize: iconSize,
+    color: statusStyle.color,
+    marginRight: showIcon ? Spacing.xs : 0,
+    fontWeight: 'bold',
+  };
+
   const textStyle: TextStyle = {
     fontSize,
     fontWeight: Typography.badge.fontWeight,
     color: statusStyle.color,
     textTransform: Typography.badge.textTransform,
     letterSpacing: Typography.badge.letterSpacing,
-    marginLeft: showIcon ? Spacing.xs : 0,
   };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending': return 'Pending';
-      case 'inProgress': return 'In Progress';
-      case 'completed': return 'Completed';
-      case 'signed': return 'Signed';
-      case 'cancelled': return 'Cancelled';
-      default: return status;
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending': return 'Clock';
-      case 'inProgress': return 'PlayCircle';
-      case 'completed': return 'CheckCircle';
-      case 'signed': return 'Edit3';
-      case 'cancelled': return 'XCircle';
-      default: return 'Circle';
-    }
-  };
-
-  const IconComponent = Lucide[getStatusIcon(status) as keyof typeof Lucide] as any;
 
   return (
-    <View style={containerStyle}>
-      {showIcon && IconComponent && (
-        <IconComponent 
-          size={iconSize} 
-          color={statusStyle.color}
-        />
+    <View style={WrapperStyle}>
+      {showIcon && (
+        <Text style={iconStyle}>
+          {statusStyle.icon}
+        </Text>
       )}
       <Text style={textStyle}>
         {getStatusText(status)}

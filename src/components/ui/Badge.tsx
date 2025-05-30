@@ -37,7 +37,7 @@ export const Badge: React.FC<BadgeProps> = ({
   const badgeHeight = size === 'small' ? 20 : 24;
   const fontSize = size === 'small' ? 10 : Typography.badge.fontSize;
 
-  const containerStyle: ViewStyle = {
+  const WrapperStyle: ViewStyle = {
     height: badgeHeight,
     paddingHorizontal: Spacing.sm,
     backgroundColor: variantStyle.backgroundColor,
@@ -57,7 +57,7 @@ export const Badge: React.FC<BadgeProps> = ({
   };
 
   return (
-    <View style={containerStyle}>
+    <View style={WrapperStyle}>
       <Text style={textStyle}>{children}</Text>
     </View>
   );

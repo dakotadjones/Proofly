@@ -16,7 +16,7 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   text,
   style,
 }) => {
-  const containerStyle: ViewStyle = {
+  const WrapperStyle: ViewStyle = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.lg,
@@ -31,7 +31,7 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   };
 
   return (
-    <View style={containerStyle}>
+    <View style={WrapperStyle}>
       <ActivityIndicator size={size} color={color} />
       {text && <Text style={textStyle}>{text}</Text>}
     </View>

@@ -12,7 +12,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Job } from './HomeScreen';
 import { useFocusEffect } from '@react-navigation/native';
 import { calculateJobStatus, getStatusColor, getStatusText, getStatusDescription, getRemoteSigningStatus, isRemoteSigningExpired } from '../utils/JobUtils';
-//import { remoteSigningService } from '../services/RemoteSigningService';
+import { Colors, Typography, Spacing, Sizes } from '../theme';
+import { Wrapper, Button, JobStatusBadge, Badge } from '../components/ui';
 
 interface JobDetailsScreenProps {
   job: Job;
@@ -99,12 +100,14 @@ export default function JobDetailsScreen({
 
     return (
       <View style={styles.photosPreview}>
-        <Text style={styles.sectionTitle}>Photos ({job.photos.length})</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <Text style={styles.previewTitle}>Photos ({job.photos.length})</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
           {job.photos.map((photo) => (
             <View key={photo.id} style={styles.photoItem}>
               <Image source={{ uri: photo.uri }} style={styles.photoThumbnail} />
-              <Text style={styles.photoType}>{photo.type}</Text>
+              <Badge variant="primary" size="small" style={styles.photoBadge}>
+                {photo.type}
+              </Badge>
             </View>
           ))}
         </ScrollView>
@@ -113,32 +116,34 @@ export default function JobDetailsScreen({
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.Wrapper}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>{job.clientName}</Text>
           <Text style={styles.headerSubtitle}>{job.serviceType}</Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(job.status) }]}>
-          <Text style={styles.statusText}>{getStatusText(job.status)}</Text>
-        </View>
+        <JobStatusBadge status={job.status} size="medium" />
       </View>
 
       {/* Status Overview */}
-      <View style={styles.statusOverview}>
-        <Text style={styles.statusOverviewTitle}>Job Status</Text>
-        <Text style={styles.statusOverviewText}>{getStatusDescription(job)}</Text>
-        <Text style={styles.nextStepText}>{getNextStep()}</Text>
-      </View>
+      <Wrapper variant="elevated" style={styles.statusWrapper}>
+        <Text style={styles.statusTitle}>Job Status</Text>
+        <Text style={styles.statusDescription}>{getStatusDescription(job)}</Text>
+        <Text style={styles.nextStep}>{getNextStep()}</Text>
+      </Wrapper>
 
       {/* Job Information */}
-      <View style={styles.section}>
+      <Wrapper variant="default" style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Job Information</Text>
-          <TouchableOpacity style={styles.editButton} onPress={() => onEditJob(job)}>
-            <Text style={styles.editButtonText}>Edit</Text>
-          </TouchableOpacity>
+          <Button 
+            variant="outline" 
+            size="small" 
+            onPress={() => onEditJob(job)}
+          >
+            Edit
+          </Button>
         </View>
         
         <View style={styles.infoGrid}>
@@ -177,14 +182,14 @@ export default function JobDetailsScreen({
             </Text>
           </View>
         </View>
-      </View>
+      </Wrapper>
 
       {/* Remote Approval Status */}
       {job.remoteSigningData && (
-        <View style={styles.section}>
+        <Wrapper variant="default" style={styles.section}>
           <Text style={styles.sectionTitle}>📱 Remote Approval Status</Text>
           
-          <View style={styles.remoteStatusCard}>
+          <View style={styles.remoteStatusWrapper}>
             <View style={styles.remoteStatusHeader}>
               <Text style={styles.remoteStatusTitle}>
                 {job.signature ? '✅ Approved' : '⏳ Waiting for Client'}
@@ -236,8 +241,9 @@ export default function JobDetailsScreen({
               <View style={styles.remoteStatusActions}>
                 {isRemoteSigningExpired(job) ? (
                   <>
-                    <TouchableOpacity 
-                      style={styles.remoteActionButton}
+                    <Button 
+                      variant="primary"
+                      size="small"
                       onPress={() => {
                         Alert.alert(
                           'Resend Approval Request',
@@ -248,20 +254,24 @@ export default function JobDetailsScreen({
                           ]
                         );
                       }}
+                      style={styles.remoteActionButton}
                     >
-                      <Text style={styles.remoteActionButtonText}>🔄 Resend Request</Text>
-                    </TouchableOpacity>
+                      🔄 Resend Request
+                    </Button>
                     
-                    <TouchableOpacity 
-                      style={[styles.remoteActionButton, styles.remoteActionButtonSecondary]}
+                    <Button 
+                      variant="outline"
+                      size="small"
                       onPress={() => onGetSignature(job)}
+                      style={styles.remoteActionButton}
                     >
-                      <Text style={styles.remoteActionButtonTextSecondary}>✍️ Get In-Person Signature</Text>
-                    </TouchableOpacity>
+                      ✍️ Get In-Person Signature
+                    </Button>
                   </>
                 ) : (
-                  <TouchableOpacity 
-                    style={styles.remoteActionButton}
+                  <Button 
+                    variant="secondary"
+                    size="small"
                     onPress={() => {
                       Alert.alert(
                         'Reminder Sent',
@@ -269,103 +279,109 @@ export default function JobDetailsScreen({
                         [{ text: 'OK' }]
                       );
                     }}
+                    style={styles.remoteActionButton}
                   >
-                    <Text style={styles.remoteActionButtonText}>📞 Send Reminder</Text>
-                  </TouchableOpacity>
+                    📞 Send Reminder
+                  </Button>
                 )}
               </View>
             )}
           </View>
-        </View>
+        </Wrapper>
       )}
 
-      {/* Action Cards */}
-      <View style={styles.actionsContainer}>
+      {/* Action Wrappers */}
+      <View style={styles.actionsWrapper}>
         
-        {/* Photos Card */}
-        <TouchableOpacity style={styles.actionCard} onPress={() => onTakePhotos(job)}>
-          <View style={styles.actionHeader}>
-            <View style={styles.actionIcon}>
-              <Text style={styles.actionIconText}>📸</Text>
+        {/* Photos Wrapper */}
+        <Wrapper variant="default" style={styles.actionWrapper}>
+          <TouchableOpacity onPress={() => onTakePhotos(job)}>
+            <View style={styles.actionHeader}>
+              <View style={styles.actionIcon}>
+                <Text style={styles.actionIconText}>📸</Text>
+              </View>
+              <View style={styles.actionInfo}>
+                <Text style={styles.actionTitle}>Document with Photos</Text>
+                <Text style={styles.actionSubtitle}>
+                  {job.photos.length > 0 ? `${job.photos.length} photos taken` : 'No photos yet'}
+                </Text>
+              </View>
+              <View style={styles.actionStatus}>
+                {job.photos.length > 0 ? (
+                  <Text style={[styles.statusDot, { color: Colors.success }]}>✓</Text>
+                ) : (
+                  <Text style={[styles.statusDot, { color: Colors.warning }]}>○</Text>
+                )}
+              </View>
             </View>
-            <View style={styles.actionInfo}>
-              <Text style={styles.actionTitle}>Document with Photos</Text>
-              <Text style={styles.actionSubtitle}>
-                {job.photos.length > 0 ? `${job.photos.length} photos taken` : 'No photos yet'}
-              </Text>
-            </View>
-            <View style={styles.actionStatus}>
-              {job.photos.length > 0 ? (
-                <Text style={[styles.statusDot, { color: '#34C759' }]}>✓</Text>
-              ) : (
-                <Text style={[styles.statusDot, { color: '#FF9500' }]}>○</Text>
-              )}
-            </View>
-          </View>
-          {showPhotosPreview()}
-        </TouchableOpacity>
+            {showPhotosPreview()}
+          </TouchableOpacity>
+        </Wrapper>
 
-        {/* PDF Generation Card */}
-        <TouchableOpacity 
-          style={[styles.actionCard, !canGeneratePDF() && styles.disabledCard]} 
-          onPress={() => canGeneratePDF() ? onGeneratePDF(job) : Alert.alert('Cannot Generate PDF', 'Please take photos first to document your work.')}
-        >
-          <View style={styles.actionHeader}>
-            <View style={styles.actionIcon}>
-              <Text style={styles.actionIconText}>📄</Text>
+        {/* PDF Generation Wrapper */}
+        <Wrapper variant={canGeneratePDF() ? "default" : "flat"} style={[styles.actionWrapper, !canGeneratePDF() && styles.disabledWrapper]}>
+          <TouchableOpacity 
+            onPress={() => canGeneratePDF() ? onGeneratePDF(job) : Alert.alert('Cannot Generate PDF', 'Please take photos first to document your work.')}
+          >
+            <View style={styles.actionHeader}>
+              <View style={styles.actionIcon}>
+                <Text style={styles.actionIconText}>📄</Text>
+              </View>
+              <View style={styles.actionInfo}>
+                <Text style={[styles.actionTitle, !canGeneratePDF() && styles.disabledText]}>
+                  Generate PDF Report
+                </Text>
+                <Text style={[styles.actionSubtitle, !canGeneratePDF() && styles.disabledText]}>
+                  {canGeneratePDF() ? 
+                    (job.signature ? 'Generate final report' : 'Generate progress report') : 
+                    'Need photos first'
+                  }
+                </Text>
+              </View>
+              <View style={styles.actionStatus}>
+                <Text style={[styles.statusDot, { color: canGeneratePDF() ? Colors.primary : Colors.gray400 }]}>
+                  {canGeneratePDF() ? '→' : '○'}
+                </Text>
+              </View>
             </View>
-            <View style={styles.actionInfo}>
-              <Text style={[styles.actionTitle, !canGeneratePDF() && styles.disabledText]}>
-                Generate PDF Report
-              </Text>
-              <Text style={[styles.actionSubtitle, !canGeneratePDF() && styles.disabledText]}>
-                {canGeneratePDF() ? 
-                  (job.signature ? 'Generate final report' : 'Generate progress report') : 
-                  'Need photos first'
-                }
-              </Text>
-            </View>
-            <View style={styles.actionStatus}>
-              <Text style={[styles.statusDot, { color: canGeneratePDF() ? '#007AFF' : '#ccc' }]}>
-                {canGeneratePDF() ? '→' : '○'}
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </Wrapper>
 
-        {/* Signature Card */}
-        <TouchableOpacity style={styles.actionCard} onPress={() => onGetSignature(job)}>
-          <View style={styles.actionHeader}>
-            <View style={styles.actionIcon}>
-              <Text style={styles.actionIconText}>✍️</Text>
+        {/* Signature Wrapper */}
+        <Wrapper variant="default" style={styles.actionWrapper}>
+          <TouchableOpacity onPress={() => onGetSignature(job)}>
+            <View style={styles.actionHeader}>
+              <View style={styles.actionIcon}>
+                <Text style={styles.actionIconText}>✍️</Text>
+              </View>
+              <View style={styles.actionInfo}>
+                <Text style={styles.actionTitle}>Get Client Signature</Text>
+                <Text style={styles.actionSubtitle}>
+                  {job.signature ? `Signed by ${job.clientSignedName}` : 'Complete the job'}
+                </Text>
+              </View>
+              <View style={styles.actionStatus}>
+                {job.signature ? (
+                  <Text style={[styles.statusDot, { color: Colors.success }]}>✓</Text>
+                ) : (
+                  <Text style={[styles.statusDot, { color: Colors.warning }]}>○</Text>
+                )}
+              </View>
             </View>
-            <View style={styles.actionInfo}>
-              <Text style={styles.actionTitle}>Get Client Signature</Text>
-              <Text style={styles.actionSubtitle}>
-                {job.signature ? `Signed by ${job.clientSignedName}` : 'Complete the job'}
-              </Text>
-            </View>
-            <View style={styles.actionStatus}>
-              {job.signature ? (
-                <Text style={[styles.statusDot, { color: '#34C759' }]}>✓</Text>
-              ) : (
-                <Text style={[styles.statusDot, { color: '#FF9500' }]}>○</Text>
-              )}
-            </View>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </Wrapper>
       </View>
 
       {/* Progress Summary */}
-      <View style={styles.section}>
+      <Wrapper variant="default" style={styles.section}>
         <Text style={styles.sectionTitle}>Progress Summary</Text>
         <View style={styles.progressItems}>
           <View style={styles.progressItem}>
-            <Text style={[styles.progressDot, { color: '#34C759' }]}>✓</Text>
+            <Text style={[styles.progressDot, { color: Colors.success }]}>✓</Text>
             <Text style={styles.progressText}>Job created</Text>
           </View>
           <View style={styles.progressItem}>
-            <Text style={[styles.progressDot, { color: job.photos.length > 0 ? '#34C759' : '#ccc' }]}>
+            <Text style={[styles.progressDot, { color: job.photos.length > 0 ? Colors.success : Colors.gray400 }]}>
               {job.photos.length > 0 ? '✓' : '○'}
             </Text>
             <Text style={[styles.progressText, job.photos.length === 0 && styles.disabledText]}>
@@ -373,7 +389,7 @@ export default function JobDetailsScreen({
             </Text>
           </View>
           <View style={styles.progressItem}>
-            <Text style={[styles.progressDot, { color: job.signature ? '#34C759' : job.remoteSigningData ? '#9500FF' : '#ccc' }]}>
+            <Text style={[styles.progressDot, { color: job.signature ? Colors.success : job.remoteSigningData ? Colors.signed : Colors.gray400 }]}>
               {job.signature ? '✓' : job.remoteSigningData ? '⏳' : '○'}
             </Text>
             <Text style={[styles.progressText, !job.signature && !job.remoteSigningData && styles.disabledText]}>
@@ -381,103 +397,74 @@ export default function JobDetailsScreen({
             </Text>
           </View>
         </View>
-      </View>
+      </Wrapper>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  Wrapper: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: Colors.background,
   },
   header: {
-    backgroundColor: '#007AFF',
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    backgroundColor: Colors.primary,
+    paddingTop: Spacing.statusBarOffset + Spacing.md,
+    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.screenPadding,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
   },
+  headerContent: {
+    flex: 1,
+  },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
+    ...Typography.display,
+    color: Colors.textInverse,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 4,
+    ...Typography.body,
+    color: Colors.textInverse,
+    opacity: 0.8,
+    marginTop: Spacing.xs,
   },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+  statusWrapper: {
+    marginHorizontal: Spacing.screenPadding,
+    marginTop: -Spacing.lg, // Overlap with header
+    marginBottom: Spacing.md,
   },
-  statusText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
+  statusTitle: {
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
   },
-  statusOverview: {
-    backgroundColor: '#f8f9fa',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+  statusDescription: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.sm,
   },
-  statusOverviewTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  statusOverviewText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  nextStepText: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '500',
+  nextStep: {
+    ...Typography.bodySmall,
+    color: Colors.primary,
     fontStyle: 'italic',
   },
   section: {
-    backgroundColor: 'white',
-    margin: 15,
-    padding: 20,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginHorizontal: Spacing.screenPadding,
+    marginBottom: Spacing.md,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: Spacing.md,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  editButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  editButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
+    ...Typography.h4,
+    color: Colors.textPrimary,
   },
   infoGrid: {
-    gap: 12,
+    gap: Spacing.md,
   },
   infoItem: {
     flexDirection: 'row',
@@ -485,41 +472,40 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   infoLabel: {
-    fontSize: 14,
-    color: '#666',
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
     fontWeight: '500',
     width: 80,
   },
   infoValue: {
-    fontSize: 14,
-    color: '#333',
+    ...Typography.bodySmall,
+    color: Colors.textPrimary,
     flex: 1,
     textAlign: 'right',
   },
   // Remote Status Styles
-  remoteStatusCard: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
-    padding: 16,
+  remoteStatusWrapper: {
+    backgroundColor: Colors.gray50,
+    borderRadius: Sizes.radiusMedium,
+    padding: Spacing.md,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: Colors.borderLight,
   },
   remoteStatusHeader: {
-    marginBottom: 16,
+    marginBottom: Spacing.md,
   },
   remoteStatusTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
   },
   remoteStatusSubtitle: {
-    fontSize: 14,
-    color: '#666',
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
   },
   remoteStatusDetails: {
-    gap: 8,
-    marginBottom: 16,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   remoteStatusItem: {
     flexDirection: 'row',
@@ -527,57 +513,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   remoteStatusLabel: {
-    fontSize: 14,
-    color: '#666',
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
     fontWeight: '500',
   },
   remoteStatusValue: {
-    fontSize: 14,
-    color: '#333',
+    ...Typography.bodySmall,
+    color: Colors.textPrimary,
     fontWeight: '600',
   },
   remoteStatusActions: {
-    gap: 8,
-    paddingTop: 16,
+    gap: Spacing.sm,
+    paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
+    borderTopColor: Colors.borderLight,
   },
   remoteActionButton: {
-    backgroundColor: '#007AFF',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
+    // Button component handles styling
   },
-  remoteActionButtonSecondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#007AFF',
+  actionsWrapper: {
+    paddingHorizontal: Spacing.screenPadding,
+    gap: Spacing.md,
   },
-  remoteActionButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
+  actionWrapper: {
+    // Wrapper component handles styling
   },
-  remoteActionButtonTextSecondary: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  actionsContainer: {
-    paddingHorizontal: 15,
-    gap: 12,
-  },
-  actionCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  disabledCard: {
+  disabledWrapper: {
     opacity: 0.6,
   },
   actionHeader: {
@@ -588,10 +549,10 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: Colors.gray100,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: Spacing.md,
   },
   actionIconText: {
     fontSize: 24,
@@ -600,60 +561,64 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
   },
   actionSubtitle: {
-    fontSize: 14,
-    color: '#666',
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
   },
   actionStatus: {
-    marginLeft: 10,
+    marginLeft: Spacing.sm,
   },
   statusDot: {
-    fontSize: 20,
+    ...Typography.h3,
     fontWeight: 'bold',
   },
   disabledText: {
-    color: '#ccc',
+    color: Colors.gray400,
   },
   photosPreview: {
-    marginTop: 15,
-    paddingTop: 15,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: Colors.borderLight,
+  },
+  previewTitle: {
+    ...Typography.label,
+    marginBottom: Spacing.sm,
+  },
+  photoScroll: {
+    marginHorizontal: -Spacing.xs,
   },
   photoItem: {
-    marginRight: 10,
+    marginHorizontal: Spacing.xs,
     alignItems: 'center',
   },
   photoThumbnail: {
     width: 60,
     height: 60,
-    borderRadius: 8,
-    marginBottom: 4,
+    borderRadius: Sizes.radiusSmall,
+    marginBottom: Spacing.xs,
   },
-  photoType: {
-    fontSize: 10,
-    color: '#666',
-    textTransform: 'uppercase',
+  photoBadge: {
+    // Badge component handles styling
   },
   progressItems: {
-    gap: 12,
+    gap: Spacing.md,
   },
   progressItem: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   progressDot: {
-    fontSize: 18,
+    ...Typography.h4,
     fontWeight: 'bold',
     width: 30,
   },
   progressText: {
-    fontSize: 16,
-    color: '#333',
+    ...Typography.body,
+    color: Colors.textPrimary,
   },
 });

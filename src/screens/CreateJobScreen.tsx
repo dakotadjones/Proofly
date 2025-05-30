@@ -2,8 +2,6 @@ import React from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
   Alert,
@@ -15,6 +13,8 @@ import { Job } from './HomeScreen';
 import { cloudSyncService } from '../services/CloudSyncService';
 import { validateJobData } from '../utils/JobUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Colors, Typography, Spacing, Sizes } from '../theme';
+import { Input, Button, Wrapper } from '../components/ui';
 
 // Simplified form validation using JobUtils
 const jobSchema = z.object({
@@ -151,7 +151,8 @@ export default function CreateJobScreen({ onJobCreated, editJob }: CreateJobScre
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.Wrapper} contentContainerStyle={styles.contentWrapper}>
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>{editJob ? 'Edit Job' : 'New Job'}</Text>
         <Text style={styles.subtitle}>
@@ -159,215 +160,162 @@ export default function CreateJobScreen({ onJobCreated, editJob }: CreateJobScre
         </Text>
       </View>
 
-      <View style={styles.form}>
+      {/* Form */}
+      <Wrapper variant="default" style={styles.formWrapper}>
         {/* Client Name */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Client Name *</Text>
-          <Controller
-            control={control}
-            name="clientName"
-            render={({ field: { onChange, value } }) => (
-              <TextInput
-                style={[styles.input, errors.clientName && styles.inputError]}
-                placeholder="Enter client name"
-                value={value}
-                onChangeText={onChange}
-                autoCapitalize="words"
-              />
-            )}
-          />
-          {errors.clientName && (
-            <Text style={styles.errorText}>{errors.clientName.message}</Text>
+        <Controller
+          control={control}
+          name="clientName"
+          render={({ field: { onChange, value } }) => (
+            <Input
+              label="Client Name"
+              placeholder="Enter client name"
+              value={value}
+              onChangeText={onChange}
+              autoCapitalize="words"
+              error={errors.clientName?.message}
+              required
+            />
           )}
-        </View>
+        />
 
         {/* Client Phone */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Phone Number *</Text>
-          <Controller
-            control={control}
-            name="clientPhone"
-            render={({ field: { onChange, value } }) => (
-              <TextInput
-                style={[styles.input, errors.clientPhone && styles.inputError]}
-                placeholder="(555) 123-4567"
-                value={value}
-                onChangeText={onChange}
-                keyboardType="phone-pad"
-              />
-            )}
-          />
-          {errors.clientPhone && (
-            <Text style={styles.errorText}>{errors.clientPhone.message}</Text>
+        <Controller
+          control={control}
+          name="clientPhone"
+          render={({ field: { onChange, value } }) => (
+            <Input
+              label="Phone Number"
+              placeholder="(555) 123-4567"
+              value={value}
+              onChangeText={onChange}
+              keyboardType="phone-pad"
+              error={errors.clientPhone?.message}
+              required
+            />
           )}
-        </View>
+        />
 
         {/* Client Email */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email (Optional)</Text>
-          <Controller
-            control={control}
-            name="clientEmail"
-            render={({ field: { onChange, value } }) => (
-              <TextInput
-                style={[styles.input, errors.clientEmail && styles.inputError]}
-                placeholder="client@email.com"
-                value={value}
-                onChangeText={onChange}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            )}
-          />
-          {errors.clientEmail && (
-            <Text style={styles.errorText}>{errors.clientEmail.message}</Text>
+        <Controller
+          control={control}
+          name="clientEmail"
+          render={({ field: { onChange, value } }) => (
+            <Input
+              label="Email (Optional)"
+              placeholder="client@email.com"
+              value={value}
+              onChangeText={onChange}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.clientEmail?.message}
+            />
           )}
-        </View>
+        />
 
         {/* Service Type */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Service Type *</Text>
-          <Controller
-            control={control}
-            name="serviceType"
-            render={({ field: { onChange, value } }) => (
-              <TextInput
-                style={[styles.input, errors.serviceType && styles.inputError]}
-                placeholder="House cleaning, lawn care, etc."
-                value={value}
-                onChangeText={onChange}
-                autoCapitalize="words"
-              />
-            )}
-          />
-          {errors.serviceType && (
-            <Text style={styles.errorText}>{errors.serviceType.message}</Text>
+        <Controller
+          control={control}
+          name="serviceType"
+          render={({ field: { onChange, value } }) => (
+            <Input
+              label="Service Type"
+              placeholder="House cleaning, lawn care, etc."
+              value={value}
+              onChangeText={onChange}
+              autoCapitalize="words"
+              error={errors.serviceType?.message}
+              required
+            />
           )}
-        </View>
+        />
 
         {/* Address */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Service Address *</Text>
-          <Controller
-            control={control}
-            name="address"
-            render={({ field: { onChange, value } }) => (
-              <TextInput
-                style={[styles.input, errors.address && styles.inputError]}
-                placeholder="123 Main St, City, State"
-                value={value}
-                onChangeText={onChange}
-                autoCapitalize="words"
-                multiline
-              />
-            )}
-          />
-          {errors.address && (
-            <Text style={styles.errorText}>{errors.address.message}</Text>
+        <Controller
+          control={control}
+          name="address"
+          render={({ field: { onChange, value } }) => (
+            <Input
+              label="Service Address"
+              placeholder="123 Main St, City, State"
+              value={value}
+              onChangeText={onChange}
+              autoCapitalize="words"
+              multiline
+              error={errors.address?.message}
+              required
+              inputStyle={styles.textArea}
+            />
           )}
-        </View>
+        />
 
         {/* Description */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Description (Optional)</Text>
-          <Controller
-            control={control}
-            name="description"
-            render={({ field: { onChange, value } }) => (
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Additional notes about the job..."
-                value={value}
-                onChangeText={onChange}
-                multiline
-                numberOfLines={3}
-              />
-            )}
-          />
-        </View>
+        <Controller
+          control={control}
+          name="description"
+          render={({ field: { onChange, value } }) => (
+            <Input
+              label="Description (Optional)"
+              placeholder="Additional notes about the job..."
+              value={value}
+              onChangeText={onChange}
+              multiline
+              inputStyle={styles.textAreaLarge}
+            />
+          )}
+        />
 
         {/* Submit Button */}
-        <TouchableOpacity
-          style={[styles.submitButton, !isValid && styles.submitButtonDisabled]}
+        <Button
+          variant={isValid ? "primary" : "outline"}
           onPress={handleSubmit(onSubmit)}
           disabled={!isValid}
+          style={styles.submitButton}
         >
-          <Text style={styles.submitButtonText}>
-            {editJob ? 'Update Job' : 'Create Job'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          {editJob ? 'Update Job' : 'Create Job'}
+        </Button>
+      </Wrapper>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  Wrapper: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: Colors.background,
+  },
+  contentWrapper: {
+    flexGrow: 1,
   },
   header: {
-    backgroundColor: '#007AFF',
-    paddingTop: 60,
-    paddingBottom: 30,
-    paddingHorizontal: 20,
+    backgroundColor: Colors.primary,
+    paddingTop: Spacing.statusBarOffset + Spacing.lg,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.screenPadding,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 4,
+    ...Typography.display,
+    color: Colors.textInverse,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+    ...Typography.body,
+    color: Colors.textInverse,
+    opacity: 0.8,
   },
-  form: {
-    padding: 20,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#333',
-  },
-  inputError: {
-    borderColor: '#ff3b30',
+  formWrapper: {
+    margin: Spacing.screenPadding,
+    marginTop: -Spacing.lg, // Overlap with header
   },
   textArea: {
-    height: 80,
+    minHeight: 60,
     textAlignVertical: 'top',
   },
-  errorText: {
-    color: '#ff3b30',
-    fontSize: 14,
-    marginTop: 4,
+  textAreaLarge: {
+    minHeight: 80,
+    textAlignVertical: 'top',
   },
   submitButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  submitButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    marginTop: Spacing.lg,
   },
 });

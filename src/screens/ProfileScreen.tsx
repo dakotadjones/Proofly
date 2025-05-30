@@ -6,12 +6,13 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { getCurrentUser, supabase } from '../services/SupabaseHTTPClient';
 import { getTierDisplayName, getTierColor, getTierLimits } from '../utils/JobUtils';
 import { mvpStorageService } from '../services/MVPStorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Colors, Typography, Spacing, Sizes } from '../theme';
+import { Wrapper, Button, Badge, LoadingSpinner } from '../components/ui';
 
 interface UserProfile {
   id: string;
@@ -161,26 +162,35 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading profile...</Text>
+      <View style={styles.Wrapper}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <Text style={styles.headerSubtitle}>Account & Settings</Text>
+        </View>
+        <LoadingSpinner text="Loading profile..." style={styles.loadingWrapper} />
       </View>
     );
   }
 
   if (!profile) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Failed to load profile</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadProfile}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
+      <View style={styles.Wrapper}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <Text style={styles.headerSubtitle}>Account & Settings</Text>
+        </View>
+        <View style={styles.errorWrapper}>
+          <Text style={styles.errorText}>Failed to load profile</Text>
+          <Button variant="primary" onPress={loadProfile} style={styles.retryButton}>
+            Retry
+          </Button>
+        </View>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.Wrapper}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
@@ -188,7 +198,7 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
       </View>
 
       {/* Profile Info */}
-      <View style={styles.section}>
+      <Wrapper variant="default" style={styles.section}>
         <Text style={styles.sectionTitle}>Account Information</Text>
         
         <View style={styles.infoItem}>
@@ -230,54 +240,63 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
             {formatDate(profile.last_photo_upload)}
           </Text>
         </View>
-      </View>
+      </Wrapper>
 
       {/* Subscription Info */}
-      <View style={styles.section}>
+      <Wrapper variant="default" style={styles.section}>
         <Text style={styles.sectionTitle}>Subscription</Text>
         
-        <View style={styles.subscriptionCard}>
+        <View style={styles.subscriptionWrapper}>
           <View style={styles.subscriptionHeader}>
-            <View style={[styles.tierBadge, { backgroundColor: getTierColor(profile.subscription_tier) }]}>
-              <Text style={styles.tierBadgeText}>{getTierDisplayName(profile.subscription_tier)}</Text>
-            </View>
+            <Badge 
+              variant={profile.subscription_tier === 'free' ? 'warning' : 'success'}
+              style={styles.tierBadge}
+            >
+              {getTierDisplayName(profile.subscription_tier)}
+            </Badge>
           </View>
           
           <Text style={styles.tierLimits}>{getTierLimits(profile.subscription_tier)}</Text>
           
-          <View style={styles.usageInfo}>
-            <Text style={styles.usageLabel}>Jobs Created:</Text>
-            <Text style={styles.usageValue}>
-              {profile.jobs_count} {profile.subscription_tier === 'free' ? '/ 20' : ''}
-            </Text>
-          </View>
+          <View style={styles.usageGrid}>
+            <View style={styles.usageInfo}>
+              <Text style={styles.usageLabel}>Jobs Created:</Text>
+              <Text style={styles.usageValue}>
+                {profile.jobs_count} {profile.subscription_tier === 'free' ? '/ 20' : ''}
+              </Text>
+            </View>
 
-          <View style={styles.usageInfo}>
-            <Text style={styles.usageLabel}>Local Jobs:</Text>
-            <Text style={styles.usageValue}>{localJobCount}</Text>
-          </View>
+            <View style={styles.usageInfo}>
+              <Text style={styles.usageLabel}>Local Jobs:</Text>
+              <Text style={styles.usageValue}>{localJobCount}</Text>
+            </View>
 
-          <View style={styles.usageInfo}>
-            <Text style={styles.usageLabel}>Storage Used:</Text>
-            <Text style={styles.usageValue}>
-              {formatBytes(profile.storage_used_bytes || 0)}
-            </Text>
+            <View style={styles.usageInfo}>
+              <Text style={styles.usageLabel}>Storage Used:</Text>
+              <Text style={styles.usageValue}>
+                {formatBytes(profile.storage_used_bytes || 0)}
+              </Text>
+            </View>
           </View>
 
           {profile.subscription_tier === 'free' && (
-            <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
-              <Text style={styles.upgradeButtonText}>🚀 Upgrade Plan</Text>
-            </TouchableOpacity>
+            <Button 
+              variant="success" 
+              onPress={handleUpgrade} 
+              style={styles.upgradeButton}
+            >
+              🚀 Upgrade Plan
+            </Button>
           )}
         </View>
-      </View>
+      </Wrapper>
 
       {/* MVP: Usage Limits & Rate Limiting */}
       {usageStats && (
-        <View style={styles.section}>
+        <Wrapper variant="default" style={styles.section}>
           <Text style={styles.sectionTitle}>Usage Limits & Rate Limits</Text>
           
-          <View style={styles.limitCard}>
+          <View style={styles.limitWrapper}>
             <View style={styles.limitItem}>
               <Text style={styles.limitLabel}>Photos Per Job:</Text>
               <Text style={[
@@ -296,10 +315,10 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
             </View>
 
             {rateLimitStatus && (
-              <>
-                <View style={styles.rateLimitSection}>
-                  <Text style={styles.rateLimitTitle}>Rate Limits (Abuse Protection)</Text>
-                  
+              <View style={styles.rateLimitSection}>
+                <Text style={styles.rateLimitTitle}>Rate Limits (Abuse Protection)</Text>
+                
+                <View style={styles.rateLimitGrid}>
                   <View style={styles.rateLimitItem}>
                     <Text style={styles.rateLimitLabel}>Per Minute:</Text>
                     <Text style={styles.rateLimitValue}>
@@ -321,7 +340,7 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
                     </Text>
                   </View>
                 </View>
-              </>
+              </View>
             )}
 
             {usageStats.tier === 'free' && (
@@ -336,18 +355,20 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
             )}
 
             {usageStats.upgradeNeeded && (
-              <TouchableOpacity style={styles.upgradeButtonSecondary} onPress={handleUpgrade}>
-                <Text style={styles.upgradeButtonSecondaryText}>
-                  ⬆️ Get Unlimited Photos - $19/month
-                </Text>
-              </TouchableOpacity>
+              <Button 
+                variant="primary" 
+                onPress={handleUpgrade}
+                style={styles.upgradeButtonSecondary}
+              >
+                ⬆️ Get Unlimited Photos - $19/month
+              </Button>
             )}
           </View>
-        </View>
+        </Wrapper>
       )}
 
       {/* App Info */}
-      <View style={styles.section}>
+      <Wrapper variant="default" style={styles.section}>
         <Text style={styles.sectionTitle}>App Information</Text>
         
         <View style={styles.infoItem}>
@@ -366,14 +387,18 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
         <TouchableOpacity style={styles.actionButton}>
           <Text style={styles.actionButtonText}>📋 Terms of Service</Text>
         </TouchableOpacity>
-      </View>
+      </Wrapper>
 
       {/* Sign Out */}
-      <View style={styles.section}>
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
-        </TouchableOpacity>
-      </View>
+      <Wrapper variant="default" style={styles.section}>
+        <Button 
+          variant="danger" 
+          onPress={handleSignOut}
+          style={styles.signOutButton}
+        >
+          Sign Out
+        </Button>
+      </Wrapper>
 
       {/* Footer */}
       <View style={styles.footer}>
@@ -389,272 +414,220 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  Wrapper: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: Colors.background,
   },
-  loadingContainer: {
+  loadingWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  errorWrapper: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    padding: 20,
+    padding: Spacing.screenPadding,
   },
   errorText: {
-    fontSize: 16,
-    color: '#ff3b30',
-    marginBottom: 20,
+    ...Typography.body,
+    color: Colors.error,
+    marginBottom: Spacing.lg,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    minWidth: 120,
   },
   header: {
-    backgroundColor: '#007AFF',
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    backgroundColor: Colors.primary,
+    paddingTop: Spacing.statusBarOffset + Spacing.md,
+    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.screenPadding,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: 'white',
+    ...Typography.display,
+    color: Colors.textInverse,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 4,
+    ...Typography.body,
+    color: Colors.textInverse,
+    opacity: 0.8,
+    marginTop: Spacing.xs,
   },
   section: {
-    backgroundColor: 'white',
-    margin: 15,
-    padding: 20,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginHorizontal: Spacing.screenPadding,
+    marginBottom: Spacing.md,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.md,
   },
   infoItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: Colors.borderLight,
   },
   infoLabel: {
-    fontSize: 16,
-    color: '#666',
+    ...Typography.body,
+    color: Colors.textSecondary,
     fontWeight: '500',
   },
   infoValue: {
-    fontSize: 16,
-    color: '#333',
+    ...Typography.body,
+    color: Colors.textPrimary,
     fontWeight: '600',
   },
-  subscriptionCard: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 10,
+  subscriptionWrapper: {
+    backgroundColor: Colors.gray50,
+    padding: Spacing.md,
+    borderRadius: Sizes.radiusMedium,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: Colors.borderLight,
   },
   subscriptionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   tierBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  tierBadgeText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
+    // Badge component handles styling
   },
   tierLimits: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.md,
+  },
+  usageGrid: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   usageInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
   usageLabel: {
-    fontSize: 14,
-    color: '#666',
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
   },
   usageValue: {
-    fontSize: 14,
-    color: '#333',
+    ...Typography.bodySmall,
+    color: Colors.textPrimary,
     fontWeight: '600',
   },
   upgradeButton: {
-    backgroundColor: '#34C759',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  upgradeButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    marginTop: Spacing.md,
   },
   // MVP: Enhanced styles for rate limiting display
-  limitCard: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 10,
+  limitWrapper: {
+    backgroundColor: Colors.gray50,
+    padding: Spacing.md,
+    borderRadius: Sizes.radiusMedium,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: Colors.borderLight,
   },
   limitItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   limitLabel: {
-    fontSize: 16,
-    color: '#666',
+    ...Typography.body,
+    color: Colors.textSecondary,
     fontWeight: '500',
   },
   limitValue: {
-    fontSize: 16,
+    ...Typography.body,
     fontWeight: '600',
   },
   unlimitedText: {
-    color: '#34C759',
+    color: Colors.success,
   },
   limitedText: {
-    color: '#FF9500',
+    color: Colors.warning,
   },
   rateLimitSection: {
-    marginTop: 16,
-    paddingTop: 16,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
+    borderTopColor: Colors.borderLight,
   },
   rateLimitTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#666',
-    marginBottom: 12,
+    ...Typography.label,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.md,
+  },
+  rateLimitGrid: {
+    gap: Spacing.sm,
   },
   rateLimitItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
   rateLimitLabel: {
-    fontSize: 14,
-    color: '#666',
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
   },
   rateLimitValue: {
-    fontSize: 14,
-    color: '#007AFF',
+    ...Typography.bodySmall,
+    color: Colors.primary,
     fontWeight: '600',
   },
   limitWarning: {
-    backgroundColor: '#fff3cd',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 12,
-    marginBottom: 12,
+    backgroundColor: Colors.warning + '15',
+    padding: Spacing.md,
+    borderRadius: Sizes.radiusSmall,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.md,
     borderWidth: 1,
-    borderColor: '#ffeaa7',
+    borderColor: Colors.warning + '30',
   },
   limitWarningText: {
-    fontSize: 14,
-    color: '#856404',
+    ...Typography.bodySmall,
+    color: Colors.warning,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   limitWarningSubtext: {
-    fontSize: 12,
-    color: '#856404',
+    ...Typography.caption,
+    color: Colors.warning,
   },
   upgradeButtonSecondary: {
-    backgroundColor: '#007AFF',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  upgradeButtonSecondaryText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
+    // Button component handles styling
   },
   actionButton: {
-    paddingVertical: 16,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: Colors.borderLight,
   },
   actionButtonText: {
-    fontSize: 16,
-    color: '#007AFF',
+    ...Typography.body,
+    color: Colors.primary,
     fontWeight: '500',
   },
   signOutButton: {
-    backgroundColor: '#ff3b30',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  signOutButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    // Button component handles styling
   },
   footer: {
     alignItems: 'center',
-    padding: 20,
-    marginBottom: 20,
+    padding: Spacing.screenPadding,
+    marginBottom: Spacing.lg,
   },
   footerText: {
-    fontSize: 12,
-    color: '#999',
+    ...Typography.caption,
+    color: Colors.textMuted,
     textAlign: 'center',
   },
   footerSubtext: {
-    fontSize: 10,
-    color: '#ccc',
+    ...Typography.caption,
+    color: Colors.gray400,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
 });

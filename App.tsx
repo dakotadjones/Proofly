@@ -50,7 +50,7 @@ const Stack = createStackNavigator<RootStackParamList>();
 // Loading Screen
 function LoadingScreen() {
   return (
-    <View style={styles.loadingContainer}>
+    <View style={styles.loadingWrapper}>
       <ActivityIndicator size="large" color="#007AFF" />
       <Text style={styles.loadingText}>Loading Proofly...</Text>
     </View>
@@ -121,7 +121,7 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
   };
 
   return (
-    <ScrollView style={styles.authContainer} contentContainerStyle={styles.authContentContainer}>
+    <ScrollView style={styles.authWrapper} contentContainerStyle={styles.authContentWrapper}>
       <View style={styles.authHeader}>
         <Text style={styles.authTitle}>
           {isSignUp ? 'Create Account' : 'Welcome Back'}
@@ -219,7 +219,7 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
         <View style={styles.trialInfo}>
           <Text style={styles.trialTitle}>🎉 Start with 20 Free Jobs!</Text>
           <Text style={styles.trialText}>
-            No credit card required. Full access to all features including cloud backup, 
+            No credit Wrapper required. Full access to all features including cloud backup, 
             photo documentation, digital signatures, and PDF reports.
           </Text>
         </View>
@@ -645,15 +645,15 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
+  loadingWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
   loadingText: { marginTop: 16, fontSize: 18, color: '#666' },
   syncStatus: { marginRight: 15, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: 'rgba(255, 255, 255, 0.2)', borderRadius: 12 },
   syncStatusText: { color: 'white', fontSize: 12, fontWeight: '500' },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
   profileButton: { marginRight: 15, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   profileButtonText: { fontSize: 24 },
-  authContainer: { flex: 1, backgroundColor: '#f8f9fa' },
-  authContentContainer: { flexGrow: 1, justifyContent: 'center', padding: 20 },
+  authWrapper: { flex: 1, backgroundColor: '#f8f9fa' },
+  authContentWrapper: { flexGrow: 1, justifyContent: 'center', padding: 20 },
   authHeader: { alignItems: 'center', marginBottom: 40 },
   authTitle: { fontSize: 32, fontWeight: 'bold', color: '#333', marginBottom: 8 },
   authSubtitle: { fontSize: 16, color: '#666', textAlign: 'center', lineHeight: 24 },

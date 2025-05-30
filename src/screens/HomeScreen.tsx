@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { calculateJobStatus, getStatusColor, getStatusText, getStatusDescription } from '../utils/JobUtils';
+import { Colors, Typography, Spacing, Sizes, Theme } from '../theme';
+import { Wrapper, Button, JobStatusBadge, EmptyState } from '../components/ui';
 
 export interface Job {
   id: string;
@@ -106,116 +108,121 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
   };
 
   const renderJobItem = ({ item }: { item: Job }) => (
-    <Pressable
-      style={({ pressed }) => [
-        styles.jobCard,
-        pressed && styles.jobCardPressed
-      ]}
-      onPress={() => onJobSelect(item)}
-    >
-      <View style={styles.jobHeader}>
-        <View style={styles.jobInfo}>
-          <Text style={styles.clientName}>{item.clientName}</Text>
-          <Text style={styles.serviceType}>{item.serviceType}</Text>
-          <Text style={styles.address} numberOfLines={1}>{item.address}</Text>
-        </View>
-        <View style={styles.jobMeta}>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-            <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+    <Wrapper variant="elevated" style={styles.jobWrapper}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.jobWrapperContent,
+          pressed && styles.jobWrapperPressed
+        ]}
+        onPress={() => onJobSelect(item)}
+      >
+        <View style={styles.jobHeader}>
+          <View style={styles.jobInfo}>
+            <Text style={styles.clientName}>{item.clientName}</Text>
+            <Text style={styles.serviceType}>{item.serviceType}</Text>
+            <Text style={styles.address} numberOfLines={1}>{item.address}</Text>
           </View>
-          <Text style={styles.statusDescription}>{getStatusDescription(item)}</Text>
-          <Text style={styles.date}>
-            {new Date(item.createdAt).toLocaleDateString()}
-          </Text>
+          <View style={styles.jobMeta}>
+            <JobStatusBadge status={item.status} size="small" />
+            <Text style={styles.statusDescription}>{getStatusDescription(item)}</Text>
+            <Text style={styles.date}>
+              {new Date(item.createdAt).toLocaleDateString()}
+            </Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.jobStats}>
-        <View style={styles.stat}>
-          <Text style={styles.statNumber}>{item.photos.length}</Text>
-          <Text style={styles.statLabel}>Photos</Text>
+        <View style={styles.jobStats}>
+          <View style={styles.stat}>
+            <Text style={styles.statNumber}>{item.photos.length}</Text>
+            <Text style={styles.statLabel}>Photos</Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={[styles.statNumber, { color: item.signature ? Colors.success : Colors.gray400 }]}>
+              {item.signature ? '✓' : '○'}
+            </Text>
+            <Text style={styles.statLabel}>Signature</Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={[
+              styles.statNumber, 
+              { color: item.status === 'completed' ? Colors.success : 
+                       item.status === 'pending_remote_signature' ? Colors.signed : Colors.gray400 }
+            ]}>
+              {item.status === 'completed' ? '✓' : 
+               item.status === 'pending_remote_signature' ? '⏳' : '○'}
+            </Text>
+            <Text style={styles.statLabel}>Complete</Text>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.deleteButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              deleteJob(item.id, item.clientName);
+            }}
+          >
+            <Text style={styles.deleteX}>×</Text>
+          </TouchableOpacity>
         </View>
-        <View style={styles.stat}>
-          <Text style={[styles.statNumber, { color: item.signature ? '#34C759' : '#ccc' }]}>
-            {item.signature ? '✓' : '○'}
-          </Text>
-          <Text style={styles.statLabel}>Signature</Text>
-        </View>
-        <View style={styles.stat}>
-          <Text style={[
-            styles.statNumber, 
-            { color: item.status === 'completed' ? '#34C759' : 
-                     item.status === 'pending_remote_signature' ? '#9500FF' : '#ccc' }
-          ]}>
-            {item.status === 'completed' ? '✓' : 
-             item.status === 'pending_remote_signature' ? '⏳' : '○'}
-          </Text>
-          <Text style={styles.statLabel}>Complete</Text>
-        </View>
-        
-        <TouchableOpacity 
-          style={styles.deleteIndicator}
-          onPress={(e) => {
-            e.stopPropagation();
-            deleteJob(item.id, item.clientName);
-          }}
-        >
-          <Text style={styles.deleteX}>×</Text>
-        </TouchableOpacity>
-      </View>
-    </Pressable>
+      </Pressable>
+    </Wrapper>
   );
 
-  const EmptyState = () => (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyTitle}>No Jobs Yet</Text>
-      <Text style={styles.emptyDescription}>
-        Create your first job to get started with Proofly
-      </Text>
-      <TouchableOpacity style={styles.createFirstJobButton} onPress={onNewJob}>
-        <Text style={styles.createFirstJobButtonText}>Create First Job</Text>
-      </TouchableOpacity>
-    </View>
+  const EmptyStateComponent = () => (
+    <EmptyState
+      icon="briefcase"
+      title="No Jobs Yet"
+      description="Create your first job to get started with Proofly"
+      actionText="Create First Job"
+      onAction={onNewJob}
+      style={styles.emptyState}
+    />
   );
 
   return (
-    <View style={styles.container}>
+    <View style={styles.Wrapper}>
       {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Proofly</Text>
           <Text style={styles.headerSubtitle}>Service Documentation</Text>
         </View>
-        <TouchableOpacity style={styles.newJobButton} onPress={onNewJob}>
-          <Text style={styles.newJobButtonText}>+ New Job</Text>
-        </TouchableOpacity>
+        <Button 
+          variant="ghost" 
+          size="small" 
+          onPress={onNewJob}
+          style={styles.newJobButton}
+          textStyle={styles.newJobButtonText}
+        >
+          + New Job
+        </Button>
       </View>
 
       {/* Job Stats */}
       {jobs.length > 0 && (
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statCardNumber}>{jobs.length}</Text>
-            <Text style={styles.statCardLabel}>Total Jobs</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statCardNumber}>
+        <View style={styles.statsWrapper}>
+          <Wrapper variant="flat" style={styles.statWrapper}>
+            <Text style={styles.statWrapperNumber}>{jobs.length}</Text>
+            <Text style={styles.statWrapperLabel}>Total Jobs</Text>
+          </Wrapper>
+          <Wrapper variant="flat" style={styles.statWrapper}>
+            <Text style={styles.statWrapperNumber}>
               {jobs.filter(job => job.status === 'completed').length}
             </Text>
-            <Text style={styles.statCardLabel}>Completed</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statCardNumber}>
+            <Text style={styles.statWrapperLabel}>Completed</Text>
+          </Wrapper>
+          <Wrapper variant="flat" style={styles.statWrapper}>
+            <Text style={styles.statWrapperNumber}>
               {jobs.filter(job => job.status === 'in_progress').length}
             </Text>
-            <Text style={styles.statCardLabel}>In Progress</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statCardNumber}>
+            <Text style={styles.statWrapperLabel}>In Progress</Text>
+          </Wrapper>
+          <Wrapper variant="flat" style={styles.statWrapper}>
+            <Text style={styles.statWrapperNumber}>
               {jobs.filter(job => job.status === 'pending_remote_signature').length}
             </Text>
-            <Text style={styles.statCardLabel}>Awaiting Approval</Text>
-          </View>
+            <Text style={styles.statWrapperLabel}>Awaiting Approval</Text>
+          </Wrapper>
         </View>
       )}
 
@@ -224,11 +231,11 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
         data={jobs}
         renderItem={renderJobItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={jobs.length === 0 ? styles.emptyContainer : styles.listContainer}
+        contentContainerStyle={jobs.length === 0 ? styles.emptyWrapper : styles.listWrapper}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        ListEmptyComponent={EmptyState}
+        ListEmptyComponent={EmptyStateComponent}
         showsVerticalScrollIndicator={false}
       />
     </View>
@@ -236,200 +243,144 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  Wrapper: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: Colors.background,
   },
   header: {
-    backgroundColor: '#007AFF',
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    backgroundColor: Colors.primary,
+    paddingTop: Spacing.statusBarOffset + Spacing.md,
+    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.screenPadding,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: 'white',
+    ...Typography.display,
+    color: Colors.textInverse,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 4,
+    ...Typography.body,
+    color: Colors.textInverse,
+    opacity: 0.8,
+    marginTop: Spacing.xs,
   },
   newJobButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   newJobButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: Colors.textInverse,
   },
-  statsContainer: {
+  statsWrapper: {
     flexDirection: 'row',
-    paddingHorizontal: 15,
-    paddingVertical: 15,
-    gap: 8,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    gap: Spacing.sm,
   },
-  statCard: {
+  statWrapper: {
     flex: 1,
-    backgroundColor: 'white',
-    padding: 12,
-    borderRadius: 10,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
   },
-  statCardNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#007AFF',
+  statWrapperNumber: {
+    ...Typography.h2,
+    color: Colors.primary,
   },
-  statCardLabel: {
-    fontSize: 10,
-    color: '#666',
-    marginTop: 4,
+  statWrapperLabel: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
     textAlign: 'center',
   },
-  listContainer: {
-    padding: 15,
+  listWrapper: {
+    padding: Spacing.md,
   },
-  emptyContainer: {
+  emptyWrapper: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 15,
+    padding: Spacing.md,
   },
-  jobCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  emptyState: {
+    paddingVertical: Spacing.xxl,
   },
-  jobCardPressed: {
-    backgroundColor: '#f8f9fa',
+  jobWrapper: {
+    marginBottom: Spacing.md,
+  },
+  jobWrapperContent: {
+    // Wrapper component handles padding
+  },
+  jobWrapperPressed: {
+    opacity: 0.8,
     transform: [{ scale: 0.98 }],
   },
   jobHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   jobInfo: {
     flex: 1,
   },
   clientName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
   },
   serviceType: {
-    fontSize: 16,
-    color: '#007AFF',
-    marginBottom: 4,
+    ...Typography.body,
+    color: Colors.primary,
+    marginBottom: Spacing.xs,
   },
   address: {
-    fontSize: 14,
-    color: '#666',
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
   },
   jobMeta: {
     alignItems: 'flex-end',
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  statusText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
   statusDescription: {
-    fontSize: 11,
-    color: '#666',
-    marginBottom: 4,
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    marginVertical: Spacing.xs,
     textAlign: 'right',
   },
   date: {
-    fontSize: 12,
-    color: '#666',
+    ...Typography.caption,
+    color: Colors.textMuted,
   },
   jobStats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    marginBottom: 12,
+    borderTopColor: Colors.borderLight,
+    marginTop: Spacing.md,
   },
   stat: {
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    ...Typography.h3,
+    color: Colors.textPrimary,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
   },
-  deleteIndicator: {
+  deleteButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 15,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    marginLeft: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
   deleteX: {
-    fontSize: 18,
-    color: '#ff6b6b',
+    ...Typography.h3,
+    color: Colors.error,
     fontWeight: '300',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-  },
-  emptyDescription: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 24,
-  },
-  createFirstJobButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 25,
-  },
-  createFirstJobButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
 });

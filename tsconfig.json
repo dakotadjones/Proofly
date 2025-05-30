@@ -9,6 +9,7 @@
     "jsx": "react-jsx",
     "target": "esnext",
     "lib": [
+      "dom",
       "esnext"
     ],
     "allowJs": true,

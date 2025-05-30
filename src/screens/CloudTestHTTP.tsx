@@ -187,7 +187,7 @@ export default function CloudTestHTTP() {
   );
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.Wrapper}>
       <View style={styles.header}>
         <Text style={styles.title}>☁️ Proofly Cloud Test</Text>
         <Text style={styles.subtitle}>
@@ -273,7 +273,7 @@ export default function CloudTestHTTP() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  Wrapper: {
     flex: 1,
     backgroundColor: '#f8f9fa',
   },

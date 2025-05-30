@@ -2,14 +2,14 @@ import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Alert,
-  TextInput,
   ScrollView,
   Modal,
 } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
+import { Colors, Typography, Spacing, Sizes } from '../theme';
+import { Wrapper, Button, Input } from '../components/ui';
 
 interface JobPhoto {
   id: string;
@@ -166,16 +166,16 @@ export default function SimpleSignatureScreen({
     .signature-pad {
       width: 100%;
       height: 200px;
-      border: 2px dashed #007AFF;
-      border-radius: 8px;
+      border: 2px dashed ${Colors.primary};
+      border-radius: ${Sizes.radiusSmall}px;
     }
     .signature-pad canvas {
-      border-radius: 8px;
+      border-radius: ${Sizes.radiusSmall}px;
     }
   `;
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.Wrapper}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Complete Job</Text>
@@ -183,81 +183,70 @@ export default function SimpleSignatureScreen({
       </View>
 
       {/* Job Summary */}
-      <View style={styles.summarySection}>
-        <Text style={styles.sectionTitle}>Job Summary</Text>
+      <Wrapper variant="elevated" style={styles.summaryWrapper}>
+        <Text style={styles.summaryTitle}>Job Summary</Text>
         <Text style={styles.summaryText}>
           Photos taken: {photos.length}
         </Text>
         <Text style={styles.summaryText}>
           Completed: {new Date().toLocaleDateString()}
         </Text>
-      </View>
+      </Wrapper>
 
       {/* Completion Method Selection */}
-      <View style={styles.section}>
+      <Wrapper variant="default" style={styles.section}>
         <Text style={styles.sectionTitle}>How would you like to complete this job?</Text>
         
         <View style={styles.methodButtons}>
-          <TouchableOpacity 
-            style={[
-              styles.methodButton, 
-              completionMethod === 'in-person' && styles.methodButtonActive
-            ]}
+          <Button
+            variant={completionMethod === 'in-person' ? 'primary' : 'outline'}
             onPress={() => setCompletionMethod('in-person')}
+            style={styles.methodButton}
           >
-            <Text style={styles.methodButtonIcon}>✍️</Text>
-            <Text style={[
-              styles.methodButtonText,
-              completionMethod === 'in-person' && styles.methodButtonTextActive
-            ]}>
-              In-Person Signature
-            </Text>
-            <Text style={styles.methodButtonDesc}>Client signs here now</Text>
-          </TouchableOpacity>
+            <View style={styles.methodButtonContent}>
+              <Text style={styles.methodButtonIcon}>✍️</Text>
+              <Text style={styles.methodButtonTitle}>In-Person Signature</Text>
+              <Text style={styles.methodButtonDesc}>Client signs here now</Text>
+            </View>
+          </Button>
 
-          <TouchableOpacity 
-            style={[
-              styles.methodButton, 
-              completionMethod === 'remote' && styles.methodButtonActive
-            ]}
+          <Button
+            variant={completionMethod === 'remote' ? 'primary' : 'outline'}
             onPress={() => setCompletionMethod('remote')}
+            style={styles.methodButton}
           >
-            <Text style={styles.methodButtonIcon}>📱</Text>
-            <Text style={[
-              styles.methodButtonText,
-              completionMethod === 'remote' && styles.methodButtonTextActive
-            ]}>
-              Remote Approval
-            </Text>
-            <Text style={styles.methodButtonDesc}>Email/text client to approve</Text>
-          </TouchableOpacity>
+            <View style={styles.methodButtonContent}>
+              <Text style={styles.methodButtonIcon}>📱</Text>
+              <Text style={styles.methodButtonTitle}>Remote Approval</Text>
+              <Text style={styles.methodButtonDesc}>Email/text client to approve</Text>
+            </View>
+          </Button>
         </View>
-      </View>
+      </Wrapper>
 
       {/* In-Person Signature Section */}
       {completionMethod === 'in-person' && (
         <>
           {/* Client Satisfaction */}
-          <View style={styles.section}>
+          <Wrapper variant="default" style={styles.section}>
             <Text style={styles.sectionTitle}>How was the service? (Optional)</Text>
-            <TextInput
-              style={styles.textArea}
+            <Input
               placeholder="Any feedback or notes from the client..."
               value={jobSatisfaction}
               onChangeText={setJobSatisfaction}
               multiline
-              numberOfLines={3}
+              inputStyle={styles.textArea}
             />
-          </View>
+          </Wrapper>
 
           {/* Signature Section */}
-          <View style={styles.section}>
+          <Wrapper variant="default" style={styles.section}>
             <Text style={styles.sectionTitle}>Client Signature *</Text>
             <Text style={styles.instructionText}>
               Please have the client sign below to confirm work completion
             </Text>
             
-            <View style={styles.signatureContainer}>
+            <View style={styles.signatureWrapper}>
               <SignatureScreen
                 ref={signatureRef}
                 onOK={handleSignature}
@@ -273,16 +262,21 @@ export default function SimpleSignatureScreen({
             </View>
 
             <View style={styles.signatureControls}>
-              <TouchableOpacity 
-                style={styles.captureSignatureButton} 
+              <Button 
+                variant="success"
                 onPress={() => signatureRef.current?.readSignature()}
+                style={styles.captureButton}
               >
-                <Text style={styles.captureSignatureText}>Save Signature</Text>
-              </TouchableOpacity>
+                Save Signature
+              </Button>
               
-              <TouchableOpacity style={styles.clearButton} onPress={clearSignature}>
-                <Text style={styles.clearButtonText}>Clear</Text>
-              </TouchableOpacity>
+              <Button 
+                variant="outline" 
+                onPress={clearSignature}
+                style={styles.clearButton}
+              >
+                Clear
+              </Button>
             </View>
 
             {signature ? (
@@ -292,37 +286,36 @@ export default function SimpleSignatureScreen({
             ) : (
               <View style={styles.signatureInstructions}>
                 <Text style={styles.signatureInstructionsText}>
-                  1. Have client sign in the box above
+                  1. Have client sign in the box above{'\n'}
                   2. Tap "Save Signature" to confirm
                 </Text>
               </View>
             )}
-          </View>
+          </Wrapper>
 
           {/* Client Name */}
-          <View style={styles.section}>
+          <Wrapper variant="default" style={styles.section}>
             <Text style={styles.sectionTitle}>Client Printed Name *</Text>
-            <TextInput
-              style={styles.input}
+            <Input
               placeholder="Client's full name (printed)"
               value={clientSignedName}
               onChangeText={setClientSignedName}
               autoCapitalize="words"
             />
-          </View>
+          </Wrapper>
 
           {/* Complete Button */}
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.completeButton} onPress={completeJobInPerson}>
-              <Text style={styles.completeButtonText}>Complete Job</Text>
-            </TouchableOpacity>
+          <View style={styles.buttonWrapper}>
+            <Button variant="success" onPress={completeJobInPerson} style={styles.completeButton}>
+              Complete Job
+            </Button>
           </View>
         </>
       )}
 
       {/* Remote Signing Section */}
       {completionMethod === 'remote' && (
-        <View style={styles.section}>
+        <Wrapper variant="default" style={styles.section}>
           <Text style={styles.sectionTitle}>📱 Remote Client Approval</Text>
           <Text style={styles.instructionText}>
             Send a review link to your client. They'll see the photos and can approve the work remotely.
@@ -338,12 +331,12 @@ export default function SimpleSignatureScreen({
             </Text>
           </View>
 
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.remoteButton} onPress={initiateRemoteSignin}>
-              <Text style={styles.remoteButtonText}>📧 Send Review Link</Text>
-            </TouchableOpacity>
+          <View style={styles.buttonWrapper}>
+            <Button variant="primary" onPress={initiateRemoteSignin} style={styles.remoteButton}>
+              📧 Send Review Link
+            </Button>
           </View>
-        </View>
+        </Wrapper>
       )}
 
       {/* Remote Signing Modal */}
@@ -352,53 +345,56 @@ export default function SimpleSignatureScreen({
         animationType="slide"
         presentationStyle="pageSheet"
       >
-        <View style={styles.modalContainer}>
+        <View style={styles.modalWrapper}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Send Review Link</Text>
-            <TouchableOpacity onPress={() => setShowRemoteModal(false)}>
-              <Text style={styles.modalClose}>✕</Text>
-            </TouchableOpacity>
+            <Button 
+              variant="ghost" 
+              onPress={() => setShowRemoteModal(false)}
+              style={styles.modalCloseButton}
+            >
+              ✕
+            </Button>
           </View>
 
           <ScrollView style={styles.modalContent}>
             {/* Contact Method Selection */}
-            <View style={styles.modalSection}>
+            <Wrapper variant="flat" style={styles.modalSection}>
               <Text style={styles.modalSectionTitle}>How should we contact {clientName}?</Text>
               
               <View style={styles.contactMethodButtons}>
-                <TouchableOpacity 
-                  style={[
-                    styles.contactMethodButton,
-                    remoteContactMethod === 'email' && styles.contactMethodButtonActive
-                  ]}
+                <Button
+                  variant={remoteContactMethod === 'email' ? 'primary' : 'outline'}
                   onPress={() => setRemoteContactMethod('email')}
+                  style={styles.contactMethodButton}
                 >
-                  <Text style={styles.contactMethodIcon}>📧</Text>
-                  <Text style={styles.contactMethodText}>Email</Text>
-                </TouchableOpacity>
+                  <View style={styles.contactMethodContent}>
+                    <Text style={styles.contactMethodIcon}>📧</Text>
+                    <Text style={styles.contactMethodText}>Email</Text>
+                  </View>
+                </Button>
 
-                <TouchableOpacity 
-                  style={[
-                    styles.contactMethodButton,
-                    remoteContactMethod === 'sms' && styles.contactMethodButtonActive
-                  ]}
+                <Button
+                  variant={remoteContactMethod === 'sms' ? 'primary' : 'outline'}
                   onPress={() => setRemoteContactMethod('sms')}
+                  style={styles.contactMethodButton}
                 >
-                  <Text style={styles.contactMethodIcon}>💬</Text>
-                  <Text style={styles.contactMethodText}>Text (SMS)</Text>
-                </TouchableOpacity>
+                  <View style={styles.contactMethodContent}>
+                    <Text style={styles.contactMethodIcon}>💬</Text>
+                    <Text style={styles.contactMethodText}>Text (SMS)</Text>
+                  </View>
+                </Button>
               </View>
-            </View>
+            </Wrapper>
 
             {/* Contact Info Input */}
-            <View style={styles.modalSection}>
+            <Wrapper variant="flat" style={styles.modalSection}>
               <Text style={styles.modalSectionTitle}>
                 {remoteContactMethod === 'email' ? 'Email Address' : 'Phone Number'}
               </Text>
               
               {remoteContactMethod === 'email' ? (
-                <TextInput
-                  style={styles.modalInput}
+                <Input
                   placeholder="client@example.com"
                   value={customEmail}
                   onChangeText={setCustomEmail}
@@ -407,18 +403,17 @@ export default function SimpleSignatureScreen({
                   autoCorrect={false}
                 />
               ) : (
-                <TextInput
-                  style={styles.modalInput}
+                <Input
                   placeholder="(555) 123-4567"
                   value={customPhone}
                   onChangeText={setCustomPhone}
                   keyboardType="phone-pad"
                 />
               )}
-            </View>
+            </Wrapper>
 
             {/* Preview */}
-            <View style={styles.modalSection}>
+            <Wrapper variant="flat" style={styles.modalSection}>
               <Text style={styles.modalSectionTitle}>Preview Message</Text>
               <View style={styles.previewBox}>
                 <Text style={styles.previewText}>
@@ -428,360 +423,259 @@ export default function SimpleSignatureScreen({
                   }
                 </Text>
               </View>
-            </View>
+            </Wrapper>
 
             {/* Send Button */}
-            <View style={styles.modalButtonContainer}>
-              <TouchableOpacity style={styles.modalSendButton} onPress={sendRemoteSigningRequest}>
-                <Text style={styles.modalSendButtonText}>
-                  Send {remoteContactMethod === 'email' ? 'Email' : 'Text'}
-                </Text>
-              </TouchableOpacity>
+            <View style={styles.modalButtonWrapper}>
+              <Button variant="success" onPress={sendRemoteSigningRequest} style={styles.modalSendButton}>
+                Send {remoteContactMethod === 'email' ? 'Email' : 'Text'}
+              </Button>
             </View>
           </ScrollView>
         </View>
       </Modal>
 
       {/* Legal Disclaimer */}
-      <View style={styles.disclaimerSection}>
+      <Wrapper variant="flat" style={styles.disclaimerSection}>
         <Text style={styles.disclaimerText}>
           By completing this job, the client acknowledges that the work has been performed 
           as agreed and authorizes payment according to the service terms.
         </Text>
-      </View>
+      </Wrapper>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  Wrapper: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: Colors.background,
   },
   header: {
-    backgroundColor: '#007AFF',
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    backgroundColor: Colors.primary,
+    paddingTop: Spacing.statusBarOffset + Spacing.md,
+    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.screenPadding,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
+    ...Typography.display,
+    color: Colors.textInverse,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 4,
+    ...Typography.body,
+    color: Colors.textInverse,
+    opacity: 0.8,
+    marginTop: Spacing.xs,
   },
-  summarySection: {
-    backgroundColor: 'white',
-    margin: 15,
-    padding: 15,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  summaryWrapper: {
+    marginHorizontal: Spacing.screenPadding,
+    marginTop: -Spacing.lg, // Overlap with header
+    marginBottom: Spacing.md,
   },
-  section: {
-    backgroundColor: 'white',
-    marginHorizontal: 15,
-    marginBottom: 15,
-    padding: 20,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
+  summaryTitle: {
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.md,
   },
   summaryText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 5,
+    ...Typography.body,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xs,
+  },
+  section: {
+    marginHorizontal: Spacing.screenPadding,
+    marginBottom: Spacing.md,
+  },
+  sectionTitle: {
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.md,
   },
   instructionText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 15,
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.md,
     fontStyle: 'italic',
   },
   // Method Selection Styles
   methodButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Spacing.md,
   },
   methodButton: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    borderWidth: 2,
-    borderColor: '#e9ecef',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
+    paddingVertical: Spacing.lg,
   },
-  methodButtonActive: {
-    borderColor: '#007AFF',
-    backgroundColor: '#e7f3ff',
+  methodButtonContent: {
+    alignItems: 'center',
   },
   methodButtonIcon: {
     fontSize: 32,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
-  methodButtonText: {
-    fontSize: 16,
+  methodButtonTitle: {
+    ...Typography.label,
     fontWeight: 'bold',
-    color: '#666',
-    marginBottom: 4,
-  },
-  methodButtonTextActive: {
-    color: '#007AFF',
+    marginBottom: Spacing.xs,
   },
   methodButtonDesc: {
-    fontSize: 12,
-    color: '#999',
+    ...Typography.caption,
     textAlign: 'center',
+    opacity: 0.8,
   },
   // In-Person Signature Styles
   textArea: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
     minHeight: 80,
     textAlignVertical: 'top',
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  signatureContainer: {
+  signatureWrapper: {
     height: 220,
-    marginBottom: 15,
+    marginBottom: Spacing.md,
   },
   signaturePad: {
     flex: 1,
   },
   signatureControls: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
   },
-  captureSignatureButton: {
-    backgroundColor: '#34C759',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 8,
+  captureButton: {
     flex: 1,
-    marginRight: 10,
   },
-  captureSignatureText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
+  clearButton: {
+    flex: 0.4,
   },
   signatureStatus: {
-    backgroundColor: '#d4edda',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 10,
+    backgroundColor: Colors.secondaryLight,
+    padding: Spacing.sm,
+    borderRadius: Sizes.radiusSmall,
+    marginBottom: Spacing.sm,
   },
   signatureStatusText: {
-    color: '#155724',
-    fontSize: 14,
+    ...Typography.bodySmall,
+    color: Colors.secondary,
     fontWeight: 'bold',
     textAlign: 'center',
   },
   signatureInstructions: {
-    backgroundColor: '#fff3cd',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 10,
+    backgroundColor: Colors.warning + '15',
+    padding: Spacing.sm,
+    borderRadius: Sizes.radiusSmall,
+    marginBottom: Spacing.sm,
   },
   signatureInstructionsText: {
-    color: '#856404',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  clearButton: {
-    backgroundColor: 'transparent',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  clearButtonText: {
-    color: '#666',
-    fontSize: 14,
-    fontWeight: '500',
+    ...Typography.bodySmall,
+    color: Colors.warning,
     textAlign: 'center',
   },
   // Remote Signing Styles
   remoteInfoBox: {
-    backgroundColor: '#e8f5e8',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 20,
+    backgroundColor: Colors.secondaryLight,
+    padding: Spacing.md,
+    borderRadius: Sizes.radiusSmall,
+    marginBottom: Spacing.lg,
   },
   remoteInfoTitle: {
-    fontSize: 16,
+    ...Typography.body,
     fontWeight: 'bold',
-    color: '#2d5a2d',
-    marginBottom: 8,
+    color: Colors.secondary,
+    marginBottom: Spacing.sm,
   },
   remoteInfoText: {
-    fontSize: 14,
-    color: '#2d5a2d',
+    ...Typography.bodySmall,
+    color: Colors.secondary,
     lineHeight: 20,
   },
   remoteButton: {
-    backgroundColor: '#007AFF',
-    padding: 18,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  remoteButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    // Button component handles styling
   },
   // Button Styles
-  buttonContainer: {
-    paddingHorizontal: 15,
-    paddingBottom: 20,
+  buttonWrapper: {
+    paddingHorizontal: Spacing.screenPadding,
+    paddingBottom: Spacing.lg,
   },
   completeButton: {
-    backgroundColor: '#34C759',
-    padding: 18,
-    borderRadius: 10,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  completeButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    // Button component handles styling
   },
   // Modal Styles
-  modalContainer: {
+  modalWrapper: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: Colors.background,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: Spacing.screenPadding,
     borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-    paddingTop: 60,
+    borderBottomColor: Colors.borderLight,
+    paddingTop: Spacing.statusBarOffset + Spacing.md,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    ...Typography.h3,
+    color: Colors.textPrimary,
   },
-  modalClose: {
-    fontSize: 24,
-    color: '#666',
+  modalCloseButton: {
+    paddingHorizontal: 0,
   },
   modalContent: {
     flex: 1,
-    padding: 20,
+    padding: Spacing.screenPadding,
   },
   modalSection: {
-    marginBottom: 24,
+    marginBottom: Spacing.lg,
   },
   modalSectionTitle: {
-    fontSize: 16,
+    ...Typography.body,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.md,
   },
   contactMethodButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Spacing.md,
   },
   contactMethodButton: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    borderWidth: 2,
-    borderColor: '#e9ecef',
-    borderRadius: 10,
-    padding: 16,
-    alignItems: 'center',
+    paddingVertical: Spacing.md,
   },
-  contactMethodButtonActive: {
-    borderColor: '#007AFF',
-    backgroundColor: '#e7f3ff',
+  contactMethodContent: {
+    alignItems: 'center',
   },
   contactMethodIcon: {
     fontSize: 24,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   contactMethodText: {
-    fontSize: 14,
+    ...Typography.bodySmall,
     fontWeight: 'bold',
-    color: '#666',
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
   },
   previewBox: {
-    backgroundColor: '#f8f9fa',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: Colors.gray50,
+    padding: Spacing.md,
+    borderRadius: Sizes.radiusSmall,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: Colors.borderLight,
   },
   previewText: {
-    fontSize: 14,
-    color: '#666',
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
     fontStyle: 'italic',
   },
-  modalButtonContainer: {
-    marginTop: 20,
+  modalButtonWrapper: {
+    marginTop: Spacing.lg,
   },
   modalSendButton: {
-    backgroundColor: '#34C759',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  modalSendButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    // Button component handles styling
   },
   disclaimerSection: {
-    paddingHorizontal: 15,
-    paddingBottom: 30,
+    marginHorizontal: Spacing.screenPadding,
+    marginBottom: Spacing.xl,
   },
   disclaimerText: {
-    fontSize: 12,
-    color: '#666',
+    ...Typography.caption,
+    color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
   },
