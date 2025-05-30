@@ -1,8 +1,16 @@
 // src/services/RevenueCatService.ts
-// Simple RevenueCat integration for Proofly
+// Mock RevenueCat service that works in Expo Go
 
-import Purchases, { LOG_LEVEL, PurchasesOffering, CustomerInfo } from 'react-native-purchases';
 import { Platform, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Mock types that match RevenueCat's interface
+interface MockCustomerInfo {
+  entitlements: {
+    active: Record<string, any>;
+  };
+  originalPurchaseDate: string;
+}
 
 interface SubscriptionTier {
   id: 'free' | 'pro';
@@ -63,27 +71,14 @@ class RevenueCatService {
     }
   };
 
-  // Initialize RevenueCat (call this once in your App.tsx)
+  // Initialize Mock RevenueCat (works in Expo Go)
   async initialize(): Promise<boolean> {
     try {
-      // For demo mode, we'll use dummy keys
-      // Replace these with real keys when you get them
-      const demoApiKey = Platform.OS === 'ios' 
-        ? 'demo_apple_key_123' 
-        : 'demo_google_key_123';
-
-      // Set up logging for development
-      Purchases.setLogLevel(LOG_LEVEL.DEBUG);
-
-      // Configure RevenueCat
-      await Purchases.configure({ apiKey: demoApiKey });
-      
+      console.log('🎭 Mock RevenueCat initialized (Expo Go compatible)');
       this.isConfigured = true;
-      console.log('✅ RevenueCat configured successfully');
       return true;
-      
     } catch (error) {
-      console.error('❌ RevenueCat configuration failed:', error);
+      console.error('❌ Mock RevenueCat initialization failed:', error);
       this.isConfigured = false;
       return false;
     }
@@ -139,60 +134,91 @@ class RevenueCatService {
     }
   }
 
-  // Get available subscription packages (demo mode)
-  async getOfferings(): Promise<PurchasesOffering[]> {
+  // Mock get offerings (simulates RevenueCat packages)
+  async getOfferings(): Promise<any[]> {
     try {
       if (!this.isConfigured) {
-        throw new Error('RevenueCat not configured');
+        throw new Error('Mock RevenueCat not configured');
       }
 
-      // In demo mode, this will return empty or demo offerings
-      const offerings = await Purchases.getOfferings();
+      // Simulate RevenueCat offerings
+      const mockOfferings = [
+        {
+          identifier: 'pro_monthly',
+          serverDescription: 'Proofly Pro Monthly',
+          price: 19.99,
+          priceString: '$19.99',
+          currencyCode: 'USD',
+          billingPeriod: 'P1M'
+        }
+      ];
       
-      if (offerings.current) {
-        return [offerings.current];
-      }
-      
-      // If no offerings, we'll create a mock one for testing
-      console.log('📦 No RevenueCat offerings found - using demo mode');
-      return [];
+      console.log('📦 Mock offerings loaded');
+      return mockOfferings;
       
     } catch (error) {
-      console.error('Error getting offerings:', error);
+      console.error('Error getting mock offerings:', error);
       return [];
     }
   }
 
-  // Purchase a subscription (demo mode)
+  // Mock purchase subscription
   async purchaseSubscription(packageToPurchase?: any): Promise<{
     success: boolean;
-    customerInfo?: CustomerInfo;
+    customerInfo?: MockCustomerInfo;
     error?: string;
   }> {
     try {
       if (!this.isConfigured) {
-        throw new Error('RevenueCat not configured');
+        throw new Error('Mock RevenueCat not configured');
       }
 
-      // In demo mode, we'll simulate a successful purchase
-      Alert.alert(
-        '🎉 Demo Purchase Successful!',
-        'In demo mode, this simulates upgrading to Pro. In the real app, this would process the actual payment.',
-        [{ text: 'OK' }]
-      );
-
-      // Return mock success
-      return {
-        success: true,
-        customerInfo: {} as CustomerInfo // Mock customer info
-      };
+      // Show mock purchase dialog
+      return new Promise((resolve) => {
+        Alert.alert(
+          '🎭 Mock Purchase',
+          'This is a demo purchase in Expo Go. In the real app with development build, this would process actual payment through RevenueCat.',
+          [
+            { 
+              text: 'Cancel', 
+              style: 'cancel',
+              onPress: () => resolve({ success: false, error: 'User cancelled' })
+            },
+            { 
+              text: 'Simulate Success', 
+              onPress: async () => {
+                // Save mock subscription status
+                await this.saveMockSubscription('pro');
+                
+                resolve({
+                  success: true,
+                  customerInfo: {
+                    entitlements: { active: { 'pro': {} } },
+                    originalPurchaseDate: new Date().toISOString()
+                  }
+                });
+              }
+            }
+          ]
+        );
+      });
       
     } catch (error) {
-      console.error('Purchase error:', error);
+      console.error('Mock purchase error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Purchase failed'
       };
+    }
+  }
+
+  // Save mock subscription to local storage
+  private async saveMockSubscription(tier: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem('mock_subscription_tier', tier);
+      await AsyncStorage.setItem('mock_subscription_date', new Date().toISOString());
+    } catch (error) {
+      console.error('Error saving mock subscription:', error);
     }
   }
 
@@ -207,42 +233,53 @@ class RevenueCatService {
         return { isPro: false, tier: 'free' };
       }
 
-      // In demo mode, always return free tier
-      // In real mode, this would check actual subscription status
-      const customerInfo = await Purchases.getCustomerInfo();
+      // Check for mock subscription
+      const mockTier = await AsyncStorage.getItem('mock_subscription_tier');
+      const isPro = mockTier === 'pro';
       
-      // For demo, assume user is free tier
       return {
-        isPro: false,
-        tier: 'free'
+        isPro,
+        tier: mockTier || 'free'
       };
       
     } catch (error) {
-      console.error('Error getting customer info:', error);
+      console.error('Error getting mock customer info:', error);
       return { isPro: false, tier: 'free' };
     }
   }
 
-  // Restore purchases (important for iOS App Store requirements)
+  // Mock restore purchases
   async restorePurchases(): Promise<{
     success: boolean;
-    customerInfo?: CustomerInfo;
+    customerInfo?: MockCustomerInfo;
     error?: string;
   }> {
     try {
       if (!this.isConfigured) {
-        throw new Error('RevenueCat not configured');
+        throw new Error('Mock RevenueCat not configured');
       }
 
-      const customerInfo = await Purchases.restorePurchases();
+      // Simulate restore
+      const mockTier = await AsyncStorage.getItem('mock_subscription_tier');
       
+      Alert.alert(
+        '🎭 Mock Restore',
+        mockTier === 'pro' 
+          ? 'Found Pro subscription in local storage!' 
+          : 'No subscription found to restore.',
+        [{ text: 'OK' }]
+      );
+
       return {
         success: true,
-        customerInfo
+        customerInfo: {
+          entitlements: { active: mockTier === 'pro' ? { 'pro': {} } : {} },
+          originalPurchaseDate: new Date().toISOString()
+        }
       };
       
     } catch (error) {
-      console.error('Restore error:', error);
+      console.error('Mock restore error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Restore failed'
@@ -303,6 +340,17 @@ class RevenueCatService {
   // Check if RevenueCat is ready
   isReady(): boolean {
     return this.isConfigured;
+  }
+
+  // Reset subscription (for testing)
+  async resetMockSubscription(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem('mock_subscription_tier');
+      await AsyncStorage.removeItem('mock_subscription_date');
+      console.log('🎭 Mock subscription reset');
+    } catch (error) {
+      console.error('Error resetting mock subscription:', error);
+    }
   }
 }
 

@@ -170,7 +170,7 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
 
   const EmptyStateComponent = () => (
     <EmptyState
-      icon="briefcase"
+      icon="💼"
       title="No Jobs Yet"
       description="Create your first job to get started with Proofly"
       actionText="Create First Job"
