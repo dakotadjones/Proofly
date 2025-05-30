@@ -1,7 +1,7 @@
 // src/services/MVPStorageService.ts
 // Bulletproof storage limits with automation abuse prevention
 
-import { getCurrentUser, supabaseHTTP } from './SupabaseHTTPClient';
+import { getCurrentUser, supabase } from './SupabaseHTTPClient';
 
 interface StorageCheck {
   allowed: boolean;
@@ -118,7 +118,7 @@ class MVPStorageService {
       }
 
       // Get user tier from profile
-      const profileResult = await supabaseHTTP.select('profiles', 'subscription_tier', { id: user.id });
+      const profileResult = await supabase.select('profiles', 'subscription_tier', { id: user.id });
       if (profileResult.error) {
         // If we can't check, allow it (fail open for MVP)
         console.warn('Could not check subscription tier, allowing photo');
@@ -159,7 +159,7 @@ class MVPStorageService {
   // Enhanced usage stats with rate limit info
   async getUsageStats(userId: string): Promise<UsageStats> {
     try {
-      const profileResult = await supabaseHTTP.select('profiles', 'subscription_tier', { id: userId });
+      const profileResult = await supabase.select('profiles', 'subscription_tier', { id: userId });
       const tier = profileResult.data?.[0]?.subscription_tier || 'free';
       const limit = this.PHOTO_LIMITS[tier as keyof typeof this.PHOTO_LIMITS];
       const rateLimits = this.RATE_LIMITS[tier as keyof typeof this.RATE_LIMITS];

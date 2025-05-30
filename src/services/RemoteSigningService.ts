@@ -2,7 +2,7 @@
 // Handles remote client approval workflow
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabaseHTTP, getCurrentUser } from './SupabaseHTTPClient';
+import { supabase, getCurrentUser } from './SupabaseHTTPClient';
 import { Job } from '../screens/HomeScreen';
 import { Alert, Linking } from 'react-native';
 
@@ -147,7 +147,7 @@ class RemoteSigningService {
   // Sync to cloud (non-blocking)
   private async syncRemoteSigningRequestToCloud(request: RemoteSigningRequest): Promise<void> {
     try {
-      const result = await supabaseHTTP.insert('remote_signing_requests', {
+      const result = await supabase.insert('remote_signing_requests', {
         id: request.id,
         job_id: request.jobId,
         user_id: request.userId,
@@ -367,7 +367,7 @@ class RemoteSigningService {
   // Sync request status to cloud
   private async syncRequestStatusToCloud(request: RemoteSigningRequest): Promise<void> {
     try {
-      const result = await supabaseHTTP.update('remote_signing_requests', {
+      const result = await supabase.update('remote_signing_requests', {
         status: request.status,
         reviewed_at: request.reviewedAt,
         client_feedback: request.clientFeedback,

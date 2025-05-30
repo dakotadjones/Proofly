@@ -16,7 +16,7 @@ import PDFGenerator from './src/screens/PDFGenerator';
 import ProfileScreen from './src/screens/ProfileScreen';
 
 // Import services
-import { getCurrentUser, supabaseHTTP } from './src/services/SupabaseHTTPClient';
+import { getCurrentUser, supabase } from './src/services/SupabaseHTTPClient';
 import { cloudSyncService } from './src/services/CloudSyncService';
 import { migrationService } from './src/services/MigrationService';
 import { remoteSigningService } from './src/services/RemoteSigningService';
@@ -77,7 +77,7 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
 
     setLoading(true);
     try {
-      const result = await supabaseHTTP.signIn(formData.email, formData.password);
+      const result = await supabase.signIn(formData.email, formData.password);
       if (result.error) {
         Alert.alert('Sign In Error', result.error);
       } else {
@@ -98,7 +98,7 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
 
     setLoading(true);
     try {
-      const result = await supabaseHTTP.signUp(formData.email, formData.password, {
+      const result = await supabase.signUp(formData.email, formData.password, {
         full_name: formData.fullName,
         company_name: formData.companyName,
         phone: formData.phone,
@@ -553,7 +553,7 @@ function PDFGeneratorWithNav({ route, navigation }: any) {
 function ProfileScreenWithNav({ navigation, onSignOut }: any) {
   const handleSignOut = async () => {
     try {
-      await supabaseHTTP.signOut();
+      await supabase.signOut();
       onSignOut();
     } catch (error) {
       console.error('Sign out error:', error);

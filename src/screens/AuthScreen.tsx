@@ -1,4 +1,6 @@
 // screens/AuthScreen.tsx
+// Updated to use the new SupabaseHTTPClient instead of official SDK
+
 import React, { useState } from 'react';
 import {
   View,
@@ -10,8 +12,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../services/SupabaseHTTPClient';
 
 interface AuthScreenProps {
   onAuthSuccess: () => void;
@@ -34,12 +37,19 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       return false;
     }
     
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return false;
+    }
+    
     if (formData.password.length < 6) {
       Alert.alert('Error', 'Password must be at least 6 characters');
       return false;
     }
     
-    if (isSignUp && !formData.fullName) {
+    if (isSignUp && !formData.fullName.trim()) {
       Alert.alert('Error', 'Full name is required');
       return false;
     }
@@ -52,18 +62,22 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
-      });
+      const { user, error } = await supabase.signIn(
+        formData.email.trim(),
+        formData.password
+      );
 
       if (error) {
-        Alert.alert('Sign In Error', error.message);
-      } else {
+        Alert.alert('Sign In Error', error);
+      } else if (user) {
+        console.log('Sign in successful:', user.email);
         onAuthSuccess();
+      } else {
+        Alert.alert('Sign In Error', 'Sign in failed - no user returned');
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      console.error('Sign in error:', error);
+      Alert.alert('Error', 'An unexpected error occurred during sign in');
     } finally {
       setLoading(false);
     }
@@ -74,51 +88,95 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.fullName,
-            company_name: formData.companyName,
-            phone: formData.phone,
-          }
+      const { user, error } = await supabase.signUp(
+        formData.email.trim(),
+        formData.password,
+        {
+          full_name: formData.fullName.trim(),
+          company_name: formData.companyName.trim() || null,
+          phone: formData.phone.trim() || null,
         }
-      });
+      );
 
       if (error) {
-        Alert.alert('Sign Up Error', error.message);
-      } else if (data.user) {
+        Alert.alert('Sign Up Error', error);
+      } else if (user) {
         Alert.alert(
           'Success!', 
-          'Account created! Please check your email to verify your account.',
-          [{ text: 'OK', onPress: () => setIsSignUp(false) }]
+          'Account created! Please check your email to verify your account before signing in.',
+          [{ 
+            text: 'OK', 
+            onPress: () => {
+              setIsSignUp(false);
+              // Clear form except email for easier sign in
+              setFormData(prev => ({
+                ...prev,
+                password: '',
+                fullName: '',
+                companyName: '',
+                phone: ''
+              }));
+            }
+          }]
         );
+      } else {
+        Alert.alert('Sign Up Error', 'Account creation failed - please try again');
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      console.error('Sign up error:', error);
+      Alert.alert('Error', 'An unexpected error occurred during sign up');
     } finally {
       setLoading(false);
     }
   };
 
   const resetPassword = async () => {
-    if (!formData.email) {
-      Alert.alert('Error', 'Please enter your email address');
+    if (!formData.email.trim()) {
+      Alert.alert('Error', 'Please enter your email address first');
       return;
     }
 
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(formData.email);
+      const { error } = await supabase.resetPasswordForEmail(formData.email.trim());
       
       if (error) {
-        Alert.alert('Error', error.message);
+        Alert.alert('Error', error);
       } else {
-        Alert.alert('Success', 'Password reset email sent!');
+        Alert.alert(
+          'Password Reset Email Sent', 
+          `Check your email (${formData.email}) for password reset instructions.`
+        );
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to send reset email');
+      console.error('Password reset error:', error);
+      Alert.alert('Error', 'Failed to send password reset email');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const clearForm = () => {
+    setFormData({
+      email: '',
+      password: '',
+      fullName: '',
+      companyName: '',
+      phone: ''
+    });
+  };
+
+  const switchMode = () => {
+    setIsSignUp(!isSignUp);
+    // Clear password when switching modes for security
+    setFormData(prev => ({ ...prev, password: '' }));
   };
 
   return (
@@ -126,7 +184,10 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       style={styles.container} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>
@@ -152,6 +213,8 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                   value={formData.fullName}
                   onChangeText={(text) => setFormData(prev => ({ ...prev, fullName: text }))}
                   autoCapitalize="words"
+                  autoCorrect={false}
+                  editable={!loading}
                 />
               </View>
 
@@ -163,6 +226,8 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                   value={formData.companyName}
                   onChangeText={(text) => setFormData(prev => ({ ...prev, companyName: text }))}
                   autoCapitalize="words"
+                  autoCorrect={false}
+                  editable={!loading}
                 />
               </View>
 
@@ -174,13 +239,15 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                   value={formData.phone}
                   onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
                   keyboardType="phone-pad"
+                  autoCorrect={false}
+                  editable={!loading}
                 />
               </View>
             </>
           )}
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email *</Text>
+            <Text style={styles.label}>Email Address *</Text>
             <TextInput
               style={styles.input}
               placeholder="your@email.com"
@@ -189,6 +256,8 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="email"
+              editable={!loading}
             />
           </View>
 
@@ -201,6 +270,9 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
               onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
               secureTextEntry
               autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="password"
+              editable={!loading}
             />
           </View>
 
@@ -210,15 +282,41 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             onPress={isSignUp ? signUp : signIn}
             disabled={loading}
           >
-            <Text style={styles.primaryButtonText}>
-              {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
-            </Text>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator color="white" size="small" />
+                <Text style={styles.primaryButtonText}>
+                  {isSignUp ? 'Creating Account...' : 'Signing In...'}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.primaryButtonText}>
+                {isSignUp ? 'Create Account' : 'Sign In'}
+              </Text>
+            )}
           </TouchableOpacity>
 
           {/* Forgot Password */}
           {!isSignUp && (
-            <TouchableOpacity style={styles.forgotPassword} onPress={resetPassword}>
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            <TouchableOpacity 
+              style={styles.forgotPassword} 
+              onPress={resetPassword}
+              disabled={loading}
+            >
+              <Text style={[styles.forgotPasswordText, loading && styles.disabledText]}>
+                Forgot Password?
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Clear Form Button (for testing) */}
+          {__DEV__ && (
+            <TouchableOpacity 
+              style={styles.clearButton} 
+              onPress={clearForm}
+              disabled={loading}
+            >
+              <Text style={styles.clearButtonText}>Clear Form (Dev)</Text>
             </TouchableOpacity>
           )}
 
@@ -227,8 +325,8 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             <Text style={styles.switchModeText}>
               {isSignUp ? 'Already have an account?' : "Don't have an account?"}
             </Text>
-            <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
-              <Text style={styles.switchModeLink}>
+            <TouchableOpacity onPress={switchMode} disabled={loading}>
+              <Text style={[styles.switchModeLink, loading && styles.disabledText]}>
                 {isSignUp ? 'Sign In' : 'Sign Up'}
               </Text>
             </TouchableOpacity>
@@ -242,6 +340,25 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             <Text style={styles.trialText}>
               No credit card required. Full access to all features including cloud backup, 
               photo documentation, digital signatures, and PDF reports.
+            </Text>
+            <View style={styles.featureList}>
+              <Text style={styles.featureItem}>✅ 20 jobs included</Text>
+              <Text style={styles.featureItem}>✅ Unlimited photos per job</Text>
+              <Text style={styles.featureItem}>✅ Professional PDF reports</Text>
+              <Text style={styles.featureItem}>✅ Digital signatures</Text>
+              <Text style={styles.featureItem}>✅ Cloud backup & sync</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Connection Status (for debugging) */}
+        {__DEV__ && (
+          <View style={styles.debugInfo}>
+            <Text style={styles.debugText}>
+              Environment: {process.env.EXPO_PUBLIC_APP_ENV || 'unknown'}
+            </Text>
+            <Text style={styles.debugText}>
+              Supabase URL: {process.env.EXPO_PUBLIC_SUPABASE_URL ? 'configured' : 'missing'}
             </Text>
           </View>
         )}
@@ -259,6 +376,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 20,
+    minHeight: '100%',
   },
   header: {
     alignItems: 'center',
@@ -269,12 +387,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
     lineHeight: 24,
+    paddingHorizontal: 20,
   },
   form: {
     backgroundColor: 'white',
@@ -285,6 +405,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    marginBottom: 20,
   },
   inputGroup: {
     marginBottom: 20,
@@ -310,22 +431,46 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 10,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   primaryButtonDisabled: {
     backgroundColor: '#ccc',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   primaryButtonText: {
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
   },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   forgotPassword: {
     alignItems: 'center',
     marginTop: 16,
+    padding: 8,
   },
   forgotPasswordText: {
     color: '#007AFF',
     fontSize: 16,
+    fontWeight: '500',
+  },
+  clearButton: {
+    alignItems: 'center',
+    marginTop: 12,
+    padding: 8,
+  },
+  clearButtonText: {
+    color: '#FF9500',
+    fontSize: 14,
+    fontWeight: '500',
   },
   switchMode: {
     flexDirection: 'row',
@@ -346,23 +491,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  disabledText: {
+    color: '#ccc',
+  },
   trialInfo: {
     backgroundColor: '#e8f5e8',
     borderRadius: 12,
     padding: 20,
-    marginTop: 20,
     alignItems: 'center',
+    marginBottom: 20,
   },
   trialTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#2d5a2d',
     marginBottom: 8,
+    textAlign: 'center',
   },
   trialText: {
     fontSize: 14,
     color: '#2d5a2d',
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 16,
+  },
+  featureList: {
+    alignItems: 'flex-start',
+    width: '100%',
+  },
+  featureItem: {
+    fontSize: 14,
+    color: '#2d5a2d',
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  debugInfo: {
+    backgroundColor: '#fff3cd',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#856404',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });

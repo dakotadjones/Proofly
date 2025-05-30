@@ -2,7 +2,7 @@
 // Updated with file size validation and abuse prevention
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabaseHTTP, getCurrentUser } from './SupabaseHTTPClient';
+import { supabase, getCurrentUser } from './SupabaseHTTPClient';
 import { Job } from '../screens/HomeScreen';
 import { JobPhoto } from '../screens/CameraScreen';
 import { TIER_LIMITS } from '../utils/JobUtils';
@@ -98,7 +98,7 @@ class CloudSyncService {
   // Check if job already exists in cloud
   private async jobExistsInCloud(jobId: string, userId: string): Promise<boolean> {
     try {
-      const result = await supabaseHTTP.select('jobs', 'id', { id: jobId, user_id: userId });
+      const result = await supabase.select('jobs', 'id', { id: jobId, user_id: userId });
       return !result.error && result.data && result.data.length > 0;
     } catch (error) {
       console.log('Error checking job existence:', error);
@@ -109,7 +109,7 @@ class CloudSyncService {
   // Check if photo already exists in cloud
   private async photoExistsInCloud(photoId: string, userId: string): Promise<boolean> {
     try {
-      const result = await supabaseHTTP.select('job_photos', 'id', { id: photoId, user_id: userId });
+      const result = await supabase.select('job_photos', 'id', { id: photoId, user_id: userId });
       return !result.error && result.data && result.data.length > 0;
     } catch (error) {
       console.log('Error checking photo existence:', error);
@@ -220,7 +220,7 @@ class CloudSyncService {
       const filePath = `users/${user.id}/photos/${fileName}`;
 
       // Upload to Supabase Storage via HTTP
-      const uploadResult = await supabaseHTTP.uploadFile('job-photos', filePath, fileBase64);
+      const uploadResult = await supabase.uploadFile('job-photos', filePath, fileBase64);
 
       if (!uploadResult.success) {
         // If it's a "already exists" error, treat as success
@@ -246,13 +246,13 @@ class CloudSyncService {
         created_at: photo.timestamp
       };
 
-      const dbResult = await supabaseHTTP.insert('job_photos', photoData);
+      const dbResult = await supabase.insert('job_photos', photoData);
       
       if (dbResult.error) {
         // If metadata already exists, try updating instead
         if (dbResult.error.includes('duplicate') || dbResult.error.includes('already exists')) {
           console.log(`Photo metadata ${photo.id} already exists, updating...`);
-          const updateResult = await supabaseHTTP.update('job_photos', photoData, { id: photo.id });
+          const updateResult = await supabase.update('job_photos', photoData, { id: photo.id });
           if (updateResult.error) {
             console.warn('Photo uploaded but metadata update failed:', updateResult.error);
           }
@@ -313,18 +313,18 @@ class CloudSyncService {
       
       if (jobExists) {
         // Update existing job
-        const updateResult = await supabaseHTTP.update('jobs', jobData, { id: job.id });
+        const updateResult = await supabase.update('jobs', jobData, { id: job.id });
         if (updateResult.error) {
           throw new Error(updateResult.error);
         }
         console.log(`Job ${job.id} updated in cloud`);
       } else {
         // Insert new job
-        const jobResult = await supabaseHTTP.insert('jobs', jobData);
+        const jobResult = await supabase.insert('jobs', jobData);
         if (jobResult.error) {
           // If job already exists, try updating instead
           if (jobResult.error.includes('duplicate') || jobResult.error.includes('already exists')) {
-            const updateResult = await supabaseHTTP.update('jobs', jobData, { id: job.id });
+            const updateResult = await supabase.update('jobs', jobData, { id: job.id });
             if (updateResult.error) {
               throw new Error(updateResult.error);
             }
@@ -415,7 +415,7 @@ class CloudSyncService {
       }
 
       // Update user's job count via HTTP
-      const updateResult = await supabaseHTTP.update('profiles', 
+      const updateResult = await supabase.update('profiles', 
         { jobs_count: localJobs.length }, 
         { id: user.id }
       );
@@ -451,7 +451,7 @@ class CloudSyncService {
       }
 
       // Get jobs from cloud via HTTP
-      const jobsResult = await supabaseHTTP.select('jobs', '*', { user_id: user.id });
+      const jobsResult = await supabase.select('jobs', '*', { user_id: user.id });
       
       if (jobsResult.error) {
         throw new Error(jobsResult.error);
@@ -463,7 +463,7 @@ class CloudSyncService {
       const jobsWithPhotos: Job[] = [];
       
       for (const cloudJob of cloudJobs) {
-        const photosResult = await supabaseHTTP.select('job_photos', '*', { job_id: cloudJob.id });
+        const photosResult = await supabase.select('job_photos', '*', { job_id: cloudJob.id });
         
         const photos = photosResult.data || [];
 
@@ -529,7 +529,7 @@ class CloudSyncService {
       }
 
       // Get user profile via HTTP
-      const profileResult = await supabaseHTTP.select('profiles', '*', { id: user.id });
+      const profileResult = await supabase.select('profiles', '*', { id: user.id });
       
       if (profileResult.error) {
         throw new Error(profileResult.error);

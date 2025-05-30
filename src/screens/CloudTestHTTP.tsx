@@ -9,7 +9,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { supabaseHTTP, getCurrentUser, canCreateJob } from '../services/SupabaseHTTPClient'
+import { supabase, getCurrentUser, canCreateJob } from '../services/SupabaseHTTPClient'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface TestResult {
@@ -33,7 +33,7 @@ export default function CloudTestHTTP() {
 
     // Test 1: Supabase Connection
     try {
-      const connection = await supabaseHTTP.testConnection();
+      const connection = await supabase.testConnection();
       if (connection.success) {
         addTestResult('Supabase Connection', 'success', 'Successfully connected to Supabase');
       } else {
@@ -73,7 +73,7 @@ export default function CloudTestHTTP() {
       const testEmail = `test+${Date.now()}@proofly.com`;
       const testPassword = 'password123';
       
-      const result = await supabaseHTTP.signUp(testEmail, testPassword, {
+      const result = await supabase.signUp(testEmail, testPassword, {
         full_name: 'Test User',
         company_name: 'Test Company'
       });
@@ -94,7 +94,7 @@ export default function CloudTestHTTP() {
   const testSignIn = async () => {
     try {
       // Try to sign in with a test account
-      const result = await supabaseHTTP.signIn('test@proofly.com', 'password123');
+      const result = await supabase.signIn('test@proofly.com', 'password123');
 
       if (result.error) {
         Alert.alert('Signin Error', result.error);
@@ -109,7 +109,7 @@ export default function CloudTestHTTP() {
 
   const testSignOut = async () => {
     try {
-      await supabaseHTTP.signOut();
+      await supabase.signOut();
       setUser(null);
       Alert.alert('Success', 'Signed out successfully');
     } catch (error) {
@@ -162,7 +162,7 @@ export default function CloudTestHTTP() {
         created_at: new Date().toISOString(),
       };
 
-      const result = await supabaseHTTP.insert('jobs', testJob);
+      const result = await supabase.insert('jobs', testJob);
       
       if (result.error) {
         Alert.alert('Error', `Failed to create cloud job: ${result.error}`);

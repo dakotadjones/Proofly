@@ -8,7 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { getCurrentUser, supabaseHTTP } from '../services/SupabaseHTTPClient';
+import { getCurrentUser, supabase } from '../services/SupabaseHTTPClient';
 import { getTierDisplayName, getTierColor, getTierLimits } from '../utils/JobUtils';
 import { mvpStorageService } from '../services/MVPStorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -60,7 +60,7 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
       }
 
       // Get user profile from database
-      const profileResult = await supabaseHTTP.select('profiles', '*', { id: user.id });
+      const profileResult = await supabase.select('profiles', '*', { id: user.id });
       
       if (profileResult.error) {
         throw new Error(profileResult.error);
@@ -114,7 +114,7 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await supabaseHTTP.signOut();
+              await supabase.signOut();
               onSignOut();
             } catch (error) {
               console.error('Sign out error:', error);
