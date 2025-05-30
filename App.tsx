@@ -20,6 +20,7 @@ import { getCurrentUser, supabase } from './src/services/SupabaseHTTPClient';
 import { cloudSyncService } from './src/services/CloudSyncService';
 import { migrationService } from './src/services/MigrationService';
 import { remoteSigningService } from './src/services/RemoteSigningService';
+import { revenueCatService } from './src/services/RevenueCatService';
 
 // Import utilities
 import { generateUUID, calculateJobStatus } from './src/utils/JobUtils';
@@ -34,6 +35,7 @@ export type RootStackParamList = {
   Signature: { job: Job };
   PDFGenerator: { job: Job };
   Profile: undefined;
+  Upgrade: { reason?: 'job_limit' | 'photo_limit' | 'pdf_branding' | 'general' };
 };
 
 export interface JobFormData {
@@ -219,7 +221,7 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
         <View style={styles.trialInfo}>
           <Text style={styles.trialTitle}>🎉 Start with 20 Free Jobs!</Text>
           <Text style={styles.trialText}>
-            No credit Wrapper required. Full access to all features including cloud backup, 
+            No credit card required. Full access to all features including cloud backup, 
             photo documentation, digital signatures, and PDF reports.
           </Text>
         </View>
@@ -339,7 +341,17 @@ function CreateJobScreenWithNav({ route, navigation }: any) {
     }
   };
 
-  return <CreateJobScreen onJobCreated={handleJobCreated} editJob={editJob} />;
+  const handleUpgrade = () => {
+    navigation.navigate('Upgrade', { reason: 'job_limit' });
+  };
+
+  return (
+    <CreateJobScreen 
+      onJobCreated={handleJobCreated} 
+      onUpgrade={handleUpgrade}
+      editJob={editJob} 
+    />
+  );
 }
 
 function CameraScreenWithNav({ route, navigation }: any) {
@@ -350,7 +362,7 @@ function CameraScreenWithNav({ route, navigation }: any) {
     try {
       const photosWithUUIDs = photos.map(photo => ({
         ...photo,
-        id: photo.id.includes('-') ? photo.id : generateUUID() // Only migrate if needed
+        id: photo.id.includes('-') ? photo.id : generateUUID()
       }));
       
       const updatedJob: Job = {
@@ -409,10 +421,8 @@ function SignatureScreenWithNav({ route, navigation }: any) {
   const handleJobComplete = async (signatureData: any) => {
     try {
       if (signatureData.completionMethod === 'remote') {
-        // Handle remote signing initiation
         console.log('Remote signing initiated:', signatureData.remoteSigningData);
         
-        // Create remote signing request
         try {
           const result = await remoteSigningService.createRemoteSigningRequest(
             job,
@@ -430,14 +440,12 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           console.warn('Remote signing service failed, continuing with basic flow:', error);
         }
         
-        // Update job status to pending remote signature
         const updatedJob: Job = {
           ...job,
           status: 'pending_remote_signature' as const,
           remoteSigningData: signatureData.remoteSigningData,
         };
 
-        // Save to storage
         const savedJobs = await AsyncStorage.getItem('proofly_jobs');
         const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
         const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -447,7 +455,6 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
         }
 
-        // Try cloud sync
         try {
           const user = await getCurrentUser();
           if (user) cloudSyncService.autoSyncJob(updatedJob);
@@ -455,11 +462,9 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           console.log('Remote signing sync failed, continuing offline:', error);
         }
         
-        // Navigate back to job details
         navigation.navigate('JobDetails', { job: updatedJob });
 
       } else {
-        // Handle in-person signing (existing logic)
         const updatedJob: Job = {
           ...job,
           ...signatureData,
@@ -564,12 +569,68 @@ function ProfileScreenWithNav({ navigation, onSignOut }: any) {
   return <ProfileScreen onSignOut={handleSignOut} />;
 }
 
+// Upgrade Screen placeholder (you'll create this next)
+function UpgradeScreenWithNav({ route, navigation }: any) {
+  const { reason } = route.params || {};
+
+  const handleClose = () => {
+    navigation.goBack();
+  };
+
+  const handleUpgrade = async () => {
+    try {
+      console.log('🔄 Starting RevenueCat purchase flow...');
+      
+      const result = await revenueCatService.purchaseSubscription();
+      
+      if (result.success) {
+        Alert.alert(
+          '🎉 Upgrade Successful!',
+          'Welcome to Proofly Pro! You now have unlimited jobs and photos.',
+          [{ text: 'Awesome!', onPress: handleClose }]
+        );
+      } else {
+        Alert.alert('Upgrade Failed', result.error || 'Please try again');
+      }
+    } catch (error) {
+      console.error('Upgrade error:', error);
+      Alert.alert('Error', 'Failed to process upgrade. Please try again.');
+    }
+  };
+
+  return (
+    <View style={styles.upgradeWrapper}>
+      <Text style={styles.upgradeTitle}>Upgrade to Pro</Text>
+      <Text style={styles.upgradeText}>
+        Reason: {reason || 'general'}{'\n\n'}
+        This is demo mode. In the real app, this would show the upgrade screen with RevenueCat pricing.
+      </Text>
+      <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
+        <Text style={styles.upgradeButtonText}>Try Demo Purchase</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+        <Text style={styles.closeButtonText}>Close</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const checkAuthStatus = async () => {
     try {
+      // Initialize RevenueCat first
+      console.log('🔄 Initializing RevenueCat...');
+      const revenueCatReady = await revenueCatService.initialize();
+      
+      if (revenueCatReady) {
+        console.log('✅ RevenueCat ready');
+      } else {
+        console.log('⚠️ RevenueCat failed to initialize (demo mode)');
+      }
+
       // Run migration using centralized service
       await migrationService.runMigrationIfNeeded();
       
@@ -636,6 +697,7 @@ export default function App() {
               <Stack.Screen name="Signature" component={SignatureScreenWithNav} options={{ title: 'Complete Job' }} />
               <Stack.Screen name="PDFGenerator" component={PDFGeneratorWithNav} options={{ title: 'Generate Report' }} />
               <Stack.Screen name="Profile" component={ProfileScreenWithSignOut} options={{ title: 'Profile' }} />
+              <Stack.Screen name="Upgrade" component={UpgradeScreenWithNav} options={{ title: 'Upgrade to Pro', presentation: 'modal' }} />
             </>
           )}
         </Stack.Navigator>
@@ -669,4 +731,12 @@ const styles = StyleSheet.create({
   trialInfo: { backgroundColor: '#e8f5e8', borderRadius: 12, padding: 20, marginTop: 20, alignItems: 'center' },
   trialTitle: { fontSize: 18, fontWeight: 'bold', color: '#2d5a2d', marginBottom: 8 },
   trialText: { fontSize: 14, color: '#2d5a2d', textAlign: 'center', lineHeight: 20 },
+  // Upgrade screen styles
+  upgradeWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f8f9fa' },
+  upgradeTitle: { fontSize: 24, fontWeight: 'bold', color: '#333', marginBottom: 20 },
+  upgradeText: { fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 30, lineHeight: 24 },
+  upgradeButton: { backgroundColor: '#34C759', padding: 16, borderRadius: 8, minWidth: 200, alignItems: 'center', marginBottom: 15 },
+  upgradeButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  closeButton: { backgroundColor: '#666', padding: 12, borderRadius: 8, minWidth: 200, alignItems: 'center' },
+  closeButtonText: { color: 'white', fontSize: 16 },
 });
