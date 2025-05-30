@@ -3,8 +3,16 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabaseHTTP, getCurrentUser } from './SupabaseHTTPClient';
-import { Job, JobPhoto } from '../screens/HomeScreen'
+import { Job } from '../screens/HomeScreen';
 import { Alert, Linking } from 'react-native';
+
+// Local interface for job photos to avoid import conflicts
+interface JobPhoto {
+  id: string;
+  uri: string;
+  type: 'before' | 'during' | 'after';
+  timestamp: string;
+}
 
 interface RemoteSigningRequest {
   id: string;

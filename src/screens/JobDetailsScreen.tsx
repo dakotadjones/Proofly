@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Job } from './HomeScreen';
 import { useFocusEffect } from '@react-navigation/native';
 import { calculateJobStatus, getStatusColor, getStatusText, getStatusDescription, getRemoteSigningStatus, isRemoteSigningExpired } from '../utils/JobUtils';
-import { remoteSigningService } from '../services/RemoteSigningService';
+//import { remoteSigningService } from '../services/RemoteSigningService';
 
 interface JobDetailsScreenProps {
   job: Job;

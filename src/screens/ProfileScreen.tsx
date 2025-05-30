@@ -28,7 +28,7 @@ interface UserProfile {
 
 interface UsageStats {
   tier: string;
-  photosPerJobLimit: number | null;
+  photosPerJobLimit: number | undefined;
   upgradeNeeded: boolean;
   dailyUploads?: number;
   dailyLimit?: number;
@@ -282,16 +282,16 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
               <Text style={styles.limitLabel}>Photos Per Job:</Text>
               <Text style={[
                 styles.limitValue, 
-                usageStats.photosPerJobLimit === null ? styles.unlimitedText : styles.limitedText
+                usageStats.photosPerJobLimit === undefined ? styles.unlimitedText : styles.limitedText
               ]}>
-                {usageStats.photosPerJobLimit === null ? 'Unlimited ✨' : `${usageStats.photosPerJobLimit} max`}
+                {usageStats.photosPerJobLimit === undefined ? 'Unlimited ✨' : `${usageStats.photosPerJobLimit} max`}
               </Text>
             </View>
 
             <View style={styles.limitItem}>
               <Text style={styles.limitLabel}>Daily Photos:</Text>
               <Text style={styles.limitValue}>
-                {usageStats.dailyUploads || 0} / {usageStats.dailyLimit === null ? '∞' : usageStats.dailyLimit}
+                {usageStats.dailyUploads || 0} / {usageStats.dailyLimit === undefined ? '∞' : usageStats.dailyLimit}
               </Text>
             </View>
 

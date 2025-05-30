@@ -12,7 +12,7 @@ interface StorageCheck {
 
 interface UsageStats {
   tier: string;
-  photosPerJobLimit: number | null;
+  photosPerJobLimit: number | undefined;
   upgradeNeeded: boolean;
   dailyUploads?: number;
   dailyLimit?: number;
@@ -22,10 +22,10 @@ class MVPStorageService {
   // Simple photo limits per job
   private readonly PHOTO_LIMITS = {
     free: 25, // 25 photos per job max
-    starter: null, // Unlimited photos
-    professional: null,
-    business: null
-  };
+    starter: undefined, // Unlimited photos
+    professional: undefined,
+    business: undefined
+  } as const;
 
   // CRITICAL: Rate limiting to prevent automation abuse
   private readonly RATE_LIMITS = {
@@ -45,11 +45,11 @@ class MVPStorageService {
       photosPerDay: 2000,
     },
     business: {
-      photosPerMinute: null, // No limits
-      photosPerHour: null,
-      photosPerDay: null,
+      photosPerMinute: undefined, // No limits
+      photosPerHour: undefined,
+      photosPerDay: undefined,
     }
-  };
+  } as const;
 
   // Track upload timestamps per user (in-memory for MVP)
   private userUploads: Map<string, number[]> = new Map();
@@ -68,7 +68,7 @@ class MVPStorageService {
     const recentUploads = uploads.filter(timestamp => timestamp > dayAgo);
     
     // Check daily limit
-    if (limits.photosPerDay !== null && recentUploads.length >= limits.photosPerDay) {
+    if (limits.photosPerDay !== undefined && recentUploads.length >= limits.photosPerDay) {
       return {
         allowed: false,
         reason: `Daily photo limit reached (${limits.photosPerDay}). Please wait until tomorrow or upgrade your plan.`
@@ -78,7 +78,7 @@ class MVPStorageService {
     // Check hourly limit
     const hourAgo = now - (60 * 60 * 1000);
     const hourlyUploads = recentUploads.filter(timestamp => timestamp > hourAgo);
-    if (limits.photosPerHour !== null && hourlyUploads.length >= limits.photosPerHour) {
+    if (limits.photosPerHour !== undefined && hourlyUploads.length >= limits.photosPerHour) {
       return {
         allowed: false,
         reason: `Hourly photo limit reached (${limits.photosPerHour}). Please wait before taking more photos.`
@@ -88,7 +88,7 @@ class MVPStorageService {
     // Check per-minute limit (most important for automation prevention)
     const minuteAgo = now - (60 * 1000);
     const minuteUploads = recentUploads.filter(timestamp => timestamp > minuteAgo);
-    if (limits.photosPerMinute !== null && minuteUploads.length >= limits.photosPerMinute) {
+    if (limits.photosPerMinute !== undefined && minuteUploads.length >= limits.photosPerMinute) {
       return {
         allowed: false,
         reason: `Taking photos too quickly. Please wait a moment before taking another photo.`
@@ -136,7 +136,7 @@ class MVPStorageService {
 
       // Check photo per job limit
       const limit = this.PHOTO_LIMITS[tier];
-      if (limit !== null && currentPhotosInJob >= limit) {
+      if (limit !== undefined && currentPhotosInJob >= limit) {
         return {
           allowed: false,
           reason: `Maximum ${limit} photos per job on ${tier} plan. Upgrade for unlimited photos.`,
@@ -169,7 +169,7 @@ class MVPStorageService {
         photosPerJobLimit: limit,
         upgradeNeeded: tier === 'free',
         dailyUploads: this.getDailyUploadCount(userId),
-        dailyLimit: rateLimits?.photosPerDay || null
+        dailyLimit: rateLimits?.photosPerDay
       };
     } catch (error) {
       console.error('Error getting usage stats:', error);
@@ -184,9 +184,9 @@ class MVPStorageService {
   }
 
   // Get remaining daily uploads
-  getRemainingDailyUploads(userId: string, tier: string): number | null {
+  getRemainingDailyUploads(userId: string, tier: string): number | undefined {
     const rateLimits = this.RATE_LIMITS[tier as keyof typeof this.RATE_LIMITS];
-    if (!rateLimits?.photosPerDay) return null;
+    if (!rateLimits?.photosPerDay) return undefined;
     
     const used = this.getDailyUploadCount(userId);
     return Math.max(0, rateLimits.photosPerDay - used);
@@ -199,9 +199,9 @@ class MVPStorageService {
 
   // Get current rate limit status for debugging
   getRateLimitStatus(userId: string, tier: string): {
-    minute: { used: number; limit: number | null };
-    hour: { used: number; limit: number | null };
-    day: { used: number; limit: number | null };
+    minute: { used: number; limit: number | undefined };
+    hour: { used: number; limit: number | undefined };
+    day: { used: number; limit: number | undefined };
   } {
     const uploads = this.userUploads.get(userId) || [];
     const now = Date.now();
@@ -214,15 +214,15 @@ class MVPStorageService {
     return {
       minute: {
         used: uploads.filter(t => t > minuteAgo).length,
-        limit: limits?.photosPerMinute || null
+        limit: limits?.photosPerMinute
       },
       hour: {
         used: uploads.filter(t => t > hourAgo).length,
-        limit: limits?.photosPerHour || null
+        limit: limits?.photosPerHour
       },
       day: {
         used: uploads.filter(t => t > dayAgo).length,
-        limit: limits?.photosPerDay || null
+        limit: limits?.photosPerDay
       }
     };
   }

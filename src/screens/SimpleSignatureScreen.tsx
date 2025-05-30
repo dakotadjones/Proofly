@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 
-export interface JobPhoto {
+interface JobPhoto {
   id: string;
   uri: string;
   type: string;
