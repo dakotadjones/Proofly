@@ -11,6 +11,7 @@ import {
   Vibration,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { calculateJobStatus, getStatusColor, getStatusText, getStatusDescription } from '../utils/JobUtils';
 
 export interface Job {
   id: string;
@@ -22,28 +23,12 @@ export interface Job {
   address: string;
   status: 'created' | 'in_progress' | 'completed';
   createdAt: string;
-  photos: Array<{ id: string; uri: string; type: 'before' | 'during' | 'after'; timestamp: string }>; // Fixed type
+  photos: Array<{ id: string; uri: string; type: 'before' | 'during' | 'after'; timestamp: string }>;
   signature?: string;
   clientSignedName?: string;
   jobSatisfaction?: string;
   completedAt?: string;
 }
-
-// Helper function to calculate job status based on new logic
-const calculateJobStatus = (job: Job): Job['status'] => {
-  // If has signature, always completed
-  if (job.signature) {
-    return 'completed';
-  }
-  
-  // If has photos but no signature, in progress
-  if (job.photos.length > 0) {
-    return 'in_progress';
-  }
-  
-  // If nothing done yet, created
-  return 'created';
-};
 
 interface HomeScreenProps {
   onNewJob: () => void;
@@ -64,7 +49,7 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
       if (savedJobs) {
         const parsedJobs: Job[] = JSON.parse(savedJobs);
         
-        // Update all job statuses based on new logic
+        // Update all job statuses using centralized logic
         const updatedJobs = parsedJobs.map(job => ({
           ...job,
           status: calculateJobStatus(job)
@@ -90,17 +75,13 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
   };
 
   const deleteJob = async (jobId: string, jobTitle: string) => {
-    // Haptic feedback
     Vibration.vibrate(50);
     
     Alert.alert(
       'Delete Job',
       `Are you sure you want to delete "${jobTitle}"? This cannot be undone.`,
       [
-        { 
-          text: 'Cancel', 
-          style: 'cancel' 
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
@@ -116,34 +97,6 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
         },
       ]
     );
-  };
-
-  const getStatusColor = (status: Job['status']) => {
-    switch (status) {
-      case 'created': return '#FF9500';
-      case 'in_progress': return '#007AFF';
-      case 'completed': return '#34C759';
-      default: return '#FF9500';
-    }
-  };
-
-  const getStatusText = (status: Job['status']) => {
-    switch (status) {
-      case 'created': return 'Created';
-      case 'in_progress': return 'In Progress';
-      case 'completed': return 'Completed';
-      default: return 'Created';
-    }
-  };
-
-  const getStatusDescription = (job: Job) => {
-    if (job.signature) {
-      return 'Client signed off';
-    }
-    if (job.photos.length > 0) {
-      return `${job.photos.length} photos taken`;
-    }
-    return 'Ready to start';
   };
 
   const renderJobItem = ({ item }: { item: Job }) => (
@@ -189,7 +142,6 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
           <Text style={styles.statLabel}>Complete</Text>
         </View>
         
-        {/* Delete indicator */}
         <TouchableOpacity 
           style={styles.deleteIndicator}
           onPress={(e) => {

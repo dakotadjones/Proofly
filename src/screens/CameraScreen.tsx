@@ -12,23 +12,15 @@ import {
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import * as ImagePicker from 'expo-image-picker';
+import { generateUUID } from '../utils/JobUtils';
 
 const { width, height } = Dimensions.get('window');
-
-// Simple UUID generator
-const generateUUID = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-};
 
 export interface JobPhoto {
   id: string;
   uri: string;
   type: 'before' | 'during' | 'after';
-  timestamp: string; // Changed to string for serialization
+  timestamp: string;
 }
 
 interface CameraScreenProps {
@@ -56,7 +48,6 @@ export default function CameraScreen({
   useEffect(() => {
     (async () => {
       const mediaLibraryStatus = await MediaLibrary.requestPermissionsAsync();
-      // Permission is handled by useCameraPermissions hook
     })();
   }, []);
 
@@ -73,15 +64,13 @@ export default function CameraScreen({
         });
 
         if (photo?.uri) {
-          // Save to device gallery
           await MediaLibrary.saveToLibraryAsync(photo.uri);
 
-          // Add to our photos array - USE UUID INSTEAD OF Date.now()
           const newPhoto: JobPhoto = {
-            id: generateUUID(), // CHANGED: Use UUID instead of Date.now().toString()
+            id: generateUUID(), // Using centralized UUID generator
             uri: photo.uri,
             type: activePhotoType,
-            timestamp: new Date().toISOString(), // Store as ISO string
+            timestamp: new Date().toISOString(),
           };
 
           setPhotos(prev => {
@@ -91,7 +80,6 @@ export default function CameraScreen({
             }
             return newPhotos;
           });
-          // Auto-save will trigger from useEffect
         }
       } catch (error) {
         Alert.alert('Error', 'Failed to take picture');
@@ -111,10 +99,10 @@ export default function CameraScreen({
 
       if (!result.canceled && result.assets[0]) {
         const newPhoto: JobPhoto = {
-          id: generateUUID(), // CHANGED: Use UUID instead of Date.now().toString()
+          id: generateUUID(), // Using centralized UUID generator
           uri: result.assets[0].uri,
           type: activePhotoType,
-          timestamp: new Date().toISOString(), // Store as ISO string
+          timestamp: new Date().toISOString(),
         };
 
         setPhotos(prev => [...prev, newPhoto]);
@@ -153,7 +141,6 @@ export default function CameraScreen({
   };
 
   const completeJob = () => {
-    // Always save photos when user wants to complete/go back
     if (onPhotosComplete) {
       onPhotosComplete(photos);
     } else {
@@ -220,7 +207,6 @@ export default function CameraScreen({
           onCameraReady={() => setIsCameraReady(true)}
         />
         
-        {/* Camera Overlay - positioned absolutely over camera */}
         <View style={styles.cameraOverlay}>
           <TouchableOpacity
             style={styles.flipButton}

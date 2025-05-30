@@ -13,9 +13,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Job } from './HomeScreen';
 import { cloudSyncService } from '../services/CloudSyncService';
+import { validateJobData } from '../utils/JobUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Form validation schema
+// Simplified form validation using JobUtils
 const jobSchema = z.object({
   clientName: z.string().min(1, 'Client name is required'),
   clientEmail: z.string().email('Invalid email').optional().or(z.literal('')),
@@ -52,6 +53,13 @@ export default function CreateJobScreen({ onJobCreated, editJob }: CreateJobScre
   });
 
   const onSubmit = async (data: JobFormData) => {
+    // Use centralized validation
+    const validation = validateJobData(data);
+    if (!validation.isValid) {
+      Alert.alert('Validation Error', validation.errors.join('\n'));
+      return;
+    }
+
     // Check job limits before creating (only for new jobs, not edits)
     if (!editJob) {
       try {

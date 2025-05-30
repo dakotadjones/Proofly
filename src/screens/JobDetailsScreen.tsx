@@ -11,22 +11,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Job } from './HomeScreen';
 import { useFocusEffect } from '@react-navigation/native';
-
-// Helper function to calculate job status based on new logic
-const calculateJobStatus = (job: Job): Job['status'] => {
-  // If has signature, always completed
-  if (job.signature) {
-    return 'completed';
-  }
-  
-  // If has photos but no signature, in progress
-  if (job.photos.length > 0) {
-    return 'in_progress';
-  }
-  
-  // If nothing done yet, created
-  return 'created';
-};
+import { calculateJobStatus, getStatusColor, getStatusText, getStatusDescription } from '../utils/JobUtils';
 
 interface JobDetailsScreenProps {
   job: Job;
@@ -57,7 +42,7 @@ export default function JobDetailsScreen({
             if (updatedJob) {
               console.log('Refreshed job with', updatedJob.photos.length, 'photos');
               
-              // Update status based on new logic
+              // Update status using centralized logic
               const jobWithUpdatedStatus = {
                 ...updatedJob,
                 status: calculateJobStatus(updatedJob)
@@ -80,39 +65,6 @@ export default function JobDetailsScreen({
       loadJobFromStorage();
     }, [job.id])
   );
-  
-  const getStatusColor = (status: Job['status']) => {
-    switch (status) {
-      case 'created': return '#FF9500';
-      case 'in_progress': return '#007AFF';
-      case 'completed': return '#34C759';
-      default: return '#FF9500';
-    }
-  };
-
-  const getStatusText = (status: Job['status']) => {
-    switch (status) {
-      case 'created': return 'Created';
-      case 'in_progress': return 'In Progress';
-      case 'completed': return 'Completed';
-      default: return 'Created';
-    }
-  };
-
-  const getStatusDescription = () => {
-    if (job.signature) {
-      return 'Client has signed off - job complete!';
-    }
-    if (job.photos.length > 0) {
-      return `${job.photos.length} photos taken - ready for signature`;
-    }
-    return 'Ready to start documentation';
-  };
-
-  const canGeneratePDF = () => {
-    // Can generate PDF anytime there are photos (progress reports or final reports)
-    return job.photos.length > 0;
-  };
 
   const getNextStep = () => {
     if (job.signature) {
@@ -122,6 +74,10 @@ export default function JobDetailsScreen({
       return 'Photos documented. Get client signature to complete job.';
     }
     return 'Start by taking photos to document your work.';
+  };
+
+  const canGeneratePDF = () => {
+    return job.photos.length > 0;
   };
 
   const showPhotosPreview = () => {
@@ -158,7 +114,7 @@ export default function JobDetailsScreen({
       {/* Status Overview */}
       <View style={styles.statusOverview}>
         <Text style={styles.statusOverviewTitle}>Job Status</Text>
-        <Text style={styles.statusOverviewText}>{getStatusDescription()}</Text>
+        <Text style={styles.statusOverviewText}>{getStatusDescription(job)}</Text>
         <Text style={styles.nextStepText}>{getNextStep()}</Text>
       </View>
 

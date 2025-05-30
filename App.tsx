@@ -6,37 +6,33 @@ import { TouchableOpacity, Text, View, ActivityIndicator, StyleSheet, Alert, Scr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-gesture-handler';
 
-// Import your screens
+// Import screens
 import HomeScreen, { Job } from './src/screens/HomeScreen';
 import JobDetailsScreen from './src/screens/JobDetailsScreen';
 import CreateJobScreen from './src/screens/CreateJobScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import SimpleSignatureScreen from './src/screens/SimpleSignatureScreen';
 import PDFGenerator from './src/screens/PDFGenerator';
+import ProfileScreen from './src/screens/ProfileScreen';
 
-// Import cloud services - ONLY HTTP client
+// Import services
 import { getCurrentUser, supabaseHTTP } from './src/services/SupabaseHTTPClient';
 import { cloudSyncService } from './src/services/CloudSyncService';
+import { migrationService } from './src/services/MigrationService';
 
-// Type definitions for navigation
+// Import utilities
+import { generateUUID, calculateJobStatus } from './src/utils/JobUtils';
+
+// Types
 export type RootStackParamList = {
   Auth: undefined;
   Home: undefined;
-  JobDetails: {
-    job: Job;
-  };
-  CreateJob: {
-    editJob?: Job;
-  };
-  Camera: {
-    job: Job;
-  };
-  Signature: {
-    job: Job;
-  };
-  PDFGenerator: {
-    job: Job;
-  };
+  JobDetails: { job: Job };
+  CreateJob: { editJob?: Job };
+  Camera: { job: Job };
+  Signature: { job: Job };
+  PDFGenerator: { job: Job };
+  Profile: undefined;
 };
 
 export interface JobFormData {
@@ -50,7 +46,7 @@ export interface JobFormData {
 
 const Stack = createStackNavigator<RootStackParamList>();
 
-// Loading Screen Component
+// Loading Screen
 function LoadingScreen() {
   return (
     <View style={styles.loadingContainer}>
@@ -60,7 +56,7 @@ function LoadingScreen() {
   );
 }
 
-// Simple Auth Screen using HTTP client
+// Auth Screen
 function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -81,11 +77,9 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
     setLoading(true);
     try {
       const result = await supabaseHTTP.signIn(formData.email, formData.password);
-      
       if (result.error) {
         Alert.alert('Sign In Error', result.error);
       } else {
-        // Call the callback to update auth state instead of navigating
         onAuthSuccess();
       }
     } catch (error) {
@@ -141,42 +135,38 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
 
       <View style={styles.authForm}>
         {isSignUp && (
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Full Name *</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Your full name"
-              value={formData.fullName}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, fullName: text }))}
-              autoCapitalize="words"
-            />
-          </View>
-        )}
-
-        {isSignUp && (
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Company Name</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Your company name (optional)"
-              value={formData.companyName}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, companyName: text }))}
-              autoCapitalize="words"
-            />
-          </View>
-        )}
-
-        {isSignUp && (
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone Number</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="(555) 123-4567"
-              value={formData.phone}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
-              keyboardType="phone-pad"
-            />
-          </View>
+          <>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Full Name *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Your full name"
+                value={formData.fullName}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, fullName: text }))}
+                autoCapitalize="words"
+              />
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Company Name</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Your company name (optional)"
+                value={formData.companyName}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, companyName: text }))}
+                autoCapitalize="words"
+              />
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Phone Number</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="(555) 123-4567"
+                value={formData.phone}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
+                keyboardType="phone-pad"
+              />
+            </View>
+          </>
         )}
 
         <View style={styles.inputGroup}>
@@ -237,11 +227,10 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
   );
 }
 
-// Updated HomeScreen component with cloud sync
+// Navigation Screen Components
 function HomeScreenWithNav({ navigation }: any) {
   const [syncStatus, setSyncStatus] = useState<string>('');
 
-  // Auto-sync on app load
   useEffect(() => {
     const performInitialSync = async () => {
       try {
@@ -249,155 +238,99 @@ function HomeScreenWithNav({ navigation }: any) {
         if (user) {
           setSyncStatus('Syncing...');
           const result = await cloudSyncService.syncAllJobs();
-          if (result.success) {
-            setSyncStatus(`Synced ${result.synced || 0} jobs`);
-            setTimeout(() => setSyncStatus(''), 3000);
-          } else {
-            setSyncStatus('Sync failed');
-            setTimeout(() => setSyncStatus(''), 3000);
-          }
+          setSyncStatus(result.success ? `Synced ${result.synced || 0} jobs` : 'Sync failed');
+          setTimeout(() => setSyncStatus(''), 3000);
         }
       } catch (error) {
         console.log('Initial sync failed:', error);
       }
     };
-
     performInitialSync();
   }, []);
 
-  // Add sync status to header
   React.useEffect(() => {
-    if (syncStatus) {
-      navigation.setOptions({
-        headerRight: () => (
+    navigation.setOptions({
+      headerRight: () => syncStatus ? (
+        <View style={styles.headerRight}>
           <View style={styles.syncStatus}>
             <Text style={styles.syncStatusText}>{syncStatus}</Text>
           </View>
-        ),
-      });
-    } else {
-      navigation.setOptions({
-        headerRight: () => null,
-      });
-    }
+        </View>
+      ) : (
+        <TouchableOpacity 
+          style={styles.profileButton}
+          onPress={() => navigation.navigate('Profile')}
+        >
+          <Text style={styles.profileButtonText}>👤</Text>
+        </TouchableOpacity>
+      ),
+    });
   }, [navigation, syncStatus]);
 
-  const handleNewJob = () => {
-    navigation.navigate('CreateJob', {});
-  };
-
-  const handleJobSelect = (job: Job) => {
-    navigation.navigate('JobDetails', { job });
-  };
-
-  return <HomeScreen onNewJob={handleNewJob} onJobSelect={handleJobSelect} />;
+  return <HomeScreen 
+    onNewJob={() => navigation.navigate('CreateJob', {})}
+    onJobSelect={(job: Job) => navigation.navigate('JobDetails', { job })}
+  />;
 }
 
-// Job Details Screen with cloud sync
 function JobDetailsScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
-  const handleEditJob = (job: Job) => {
-    navigation.navigate('CreateJob', { editJob: job });
-  };
-
-  const handleTakePhotos = (job: Job) => {
-    navigation.navigate('Camera', { job });
-  };
-
-  const handleGetSignature = (job: Job) => {
-    navigation.navigate('Signature', { job });
-  };
-
-  const handleGeneratePDF = (job: Job) => {
-    navigation.navigate('PDFGenerator', { job });
-  };
-
-  // Override back button behavior
   React.useEffect(() => {
     navigation.setOptions({
       headerLeft: () => (
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Home')}
-          style={{ marginLeft: 15 }}
-        >
+        <TouchableOpacity onPress={() => navigation.navigate('Home')} style={{ marginLeft: 15 }}>
           <Text style={{ color: 'white', fontSize: 16 }}>← Home</Text>
         </TouchableOpacity>
       ),
     });
   }, [navigation]);
 
-  return (
-    <JobDetailsScreen
-      job={job}
-      onEditJob={handleEditJob}
-      onTakePhotos={handleTakePhotos}
-      onGetSignature={handleGetSignature}
-      onGeneratePDF={handleGeneratePDF}
-    />
-  );
+  return <JobDetailsScreen
+    job={job}
+    onEditJob={(job: Job) => navigation.navigate('CreateJob', { editJob: job })}
+    onTakePhotos={(job: Job) => navigation.navigate('Camera', { job })}
+    onGetSignature={(job: Job) => navigation.navigate('Signature', { job })}
+    onGeneratePDF={(job: Job) => navigation.navigate('PDFGenerator', { job })}
+  />;
 }
 
-// Updated CreateJobScreen with cloud sync and job limits
 function CreateJobScreenWithNav({ route, navigation }: any) {
   const { editJob } = route.params || {};
 
-  // Simple UUID generator for React Native
-  const generateUUID = () => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  };
-
   const handleJobCreated = async (jobData: JobFormData) => {
     try {
-      let updatedJob: Job;
-      
-      if (editJob) {
-        // Update existing job
-        updatedJob = {
-          ...editJob,
-          ...jobData,
-        };
-      } else {
-        // Create new job with UUID
-        updatedJob = {
-          id: generateUUID(), // Use UUID instead of timestamp
-          ...jobData,
-          status: 'created' as const,
-          createdAt: new Date().toISOString(),
-          photos: [],
-        };
-      }
+      const updatedJob: Job = editJob ? {
+        ...editJob,
+        ...jobData,
+      } : {
+        id: generateUUID(),
+        ...jobData,
+        status: 'created' as const,
+        createdAt: new Date().toISOString(),
+        photos: [],
+      };
 
-      // Save to local storage
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
       
       if (editJob) {
         const jobIndex = jobs.findIndex(j => j.id === editJob.id);
-        if (jobIndex !== -1) {
-          jobs[jobIndex] = updatedJob;
-        }
+        if (jobIndex !== -1) jobs[jobIndex] = updatedJob;
       } else {
         jobs.push(updatedJob);
       }
       
       await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
       
-      // Auto-sync to cloud (non-blocking)
+      // Auto-sync
       try {
         const user = await getCurrentUser();
-        if (user) {
-          cloudSyncService.autoSyncJob(updatedJob);
-        }
+        if (user) cloudSyncService.autoSyncJob(updatedJob);
       } catch (error) {
         console.log('Auto-sync failed, continuing offline:', error);
       }
       
-      // Navigate to job details
       navigation.navigate('JobDetails', { job: updatedJob });
     } catch (error) {
       console.error('Error saving job:', error);
@@ -408,75 +341,23 @@ function CreateJobScreenWithNav({ route, navigation }: any) {
   return <CreateJobScreen onJobCreated={handleJobCreated} editJob={editJob} />;
 }
 
-// Updated CameraScreen with cloud photo sync
 function CameraScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
   const photosRef = React.useRef(job.photos || []);
 
-  // Simple UUID generator for photos
-  const generateUUID = () => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  };
-
-  // Listen for back navigation and save photos
-  React.useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', async (e: any) => {
-      // Prevent default behavior to handle save first
-      e.preventDefault();
-      
-      console.log('Camera back press - saving photos:', photosRef.current.length);
-      
-      try {
-        const updatedJob = await savePhotosToJob(photosRef.current);
-        console.log('Save completed, now navigating back with updated job');
-        
-        // Navigate back with the updated job data
-        navigation.navigate('JobDetails', { job: updatedJob });
-      } catch (error) {
-        console.error('Error saving photos:', error);
-        // Still allow navigation even if save fails
-        navigation.dispatch(e.data.action);
-      }
-    });
-
-    return unsubscribe;
-  }, [navigation]);
-
   const savePhotosToJob = async (photos: any[]) => {
     try {
-      console.log('Saving photos to job:', photos.length, 'photos');
+      const photosWithUUIDs = photos.map(photo => ({
+        ...photo,
+        id: photo.id.includes('-') ? photo.id : generateUUID() // Only migrate if needed
+      }));
       
-      // Ensure all photos have UUID format IDs
-      const photosWithUUIDs = photos.map(photo => {
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-        if (!uuidRegex.test(photo.id)) {
-          return {
-            ...photo,
-            id: generateUUID()
-          };
-        }
-        return photo;
-      });
-      
-      // Calculate job status based on new logic
-      const calculateJobStatus = (updatedJob: Job): Job['status'] => {
-        if (updatedJob.signature) return 'completed';
-        if (photosWithUUIDs.length > 0) return 'in_progress';
-        return 'created';
-      };
-
-      // Update job with photos
       const updatedJob: Job = {
         ...job,
         photos: photosWithUUIDs,
         status: calculateJobStatus({ ...job, photos: photosWithUUIDs }),
       };
 
-      // Save to local storage
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
       const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -487,12 +368,9 @@ function CameraScreenWithNav({ route, navigation }: any) {
         console.log('Successfully saved job with', photosWithUUIDs.length, 'photos');
       }
 
-      // Auto-sync to cloud (non-blocking)
       try {
         const user = await getCurrentUser();
-        if (user) {
-          cloudSyncService.autoSyncJob(updatedJob);
-        }
+        if (user) cloudSyncService.autoSyncJob(updatedJob);
       } catch (error) {
         console.log('Photo sync failed, continuing offline:', error);
       }
@@ -504,37 +382,31 @@ function CameraScreenWithNav({ route, navigation }: any) {
     }
   };
 
-  const handlePhotosComplete = async (photos: any[]) => {
-    const updatedJob = await savePhotosToJob(photos);
-    navigation.navigate('JobDetails', { job: updatedJob });
-  };
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', async (e: any) => {
+      e.preventDefault();
+      const updatedJob = await savePhotosToJob(photosRef.current);
+      navigation.navigate('JobDetails', { job: updatedJob });
+    });
+    return unsubscribe;
+  }, [navigation]);
 
-  const handlePhotosChange = (photos: any[]) => {
-    // Update the ref so the back button listener has current photos
-    photosRef.current = photos;
-  };
-
-  return (
-    <CameraScreen 
-      clientName={job.clientName} 
-      onPhotosComplete={handlePhotosComplete}
-      onPhotosChange={handlePhotosChange}
-      initialPhotos={job.photos || []}
-    />
-  );
+  return <CameraScreen 
+    clientName={job.clientName} 
+    onPhotosComplete={async (photos: any[]) => {
+      const updatedJob = await savePhotosToJob(photos);
+      navigation.navigate('JobDetails', { job: updatedJob });
+    }}
+    onPhotosChange={(photos: any[]) => { photosRef.current = photos; }}
+    initialPhotos={job.photos || []}
+  />;
 }
 
-// Updated SignatureScreen with cloud sync
 function SignatureScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
-  const handleJobComplete = async (signatureData: { 
-    clientSignedName: string; 
-    jobSatisfaction?: string; 
-    signature: string 
-  }) => {
+  const handleJobComplete = async (signatureData: any) => {
     try {
-      // Update job with signature - always mark as completed when signature is captured
       const updatedJob: Job = {
         ...job,
         ...signatureData,
@@ -542,7 +414,6 @@ function SignatureScreenWithNav({ route, navigation }: any) {
         completedAt: new Date().toISOString(),
       };
 
-      // Save to local storage
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
       const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -552,17 +423,13 @@ function SignatureScreenWithNav({ route, navigation }: any) {
         await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
       }
 
-      // Auto-sync to cloud (non-blocking)
       try {
         const user = await getCurrentUser();
-        if (user) {
-          cloudSyncService.autoSyncJob(updatedJob);
-        }
+        if (user) cloudSyncService.autoSyncJob(updatedJob);
       } catch (error) {
         console.log('Signature sync failed, continuing offline:', error);
       }
 
-      // Go back to job details
       navigation.navigate('JobDetails', { job: updatedJob });
     } catch (error) {
       console.error('Error updating job with signature:', error);
@@ -570,29 +437,24 @@ function SignatureScreenWithNav({ route, navigation }: any) {
     }
   };
 
-  return (
-    <SimpleSignatureScreen 
-      clientName={job.clientName}
-      photos={job.photos}
-      onJobComplete={handleJobComplete}
-    />
-  );
+  return <SimpleSignatureScreen 
+    clientName={job.clientName}
+    photos={job.photos}
+    onJobComplete={handleJobComplete}
+  />;
 }
 
-// PDFGenerator with cloud sync
 function PDFGeneratorWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
   const handlePDFGenerated = async () => {
     try {
-      // Mark job as completed in storage but don't navigate
       const updatedJob: Job = {
         ...job,
         status: 'completed' as const,
         completedAt: job.completedAt || new Date().toISOString(),
       };
 
-      // Save to local storage
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
       const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -602,23 +464,17 @@ function PDFGeneratorWithNav({ route, navigation }: any) {
         await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
       }
 
-      // Auto-sync to cloud (non-blocking)
       try {
         const user = await getCurrentUser();
-        if (user) {
-          cloudSyncService.autoSyncJob(updatedJob);
-        }
+        if (user) cloudSyncService.autoSyncJob(updatedJob);
       } catch (error) {
         console.log('PDF generation sync failed, continuing offline:', error);
       }
-
-      // Don't navigate - stay on PDF page
     } catch (error) {
       console.error('Error marking job as completed:', error);
     }
   };
 
-  // Convert job to the format expected by PDFGenerator
   const jobData = {
     jobId: job.id,
     clientName: job.clientName,
@@ -635,84 +491,31 @@ function PDFGeneratorWithNav({ route, navigation }: any) {
     status: job.status,
   };
 
-  return (
-    <PDFGenerator 
-      jobData={jobData}
-      onPDFGenerated={handlePDFGenerated}
-    />
-  );
+  return <PDFGenerator jobData={jobData} onPDFGenerated={handlePDFGenerated} />;
+}
+
+function ProfileScreenWithNav({ navigation, onSignOut }: any) {
+  const handleSignOut = async () => {
+    try {
+      await supabaseHTTP.signOut();
+      onSignOut();
+    } catch (error) {
+      console.error('Sign out error:', error);
+      onSignOut();
+    }
+  };
+
+  return <ProfileScreen onSignOut={handleSignOut} />;
 }
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  // Simple UUID generator
-  const generateUUID = () => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  };
-
-  // Migration function to fix existing job IDs and photo IDs
-  const migrateJobIds = async () => {
-    try {
-      const savedJobs = await AsyncStorage.getItem('proofly_jobs');
-      if (!savedJobs) return;
-      
-      const jobs: Job[] = JSON.parse(savedJobs);
-      let needsUpdate = false;
-      
-      const updatedJobs = jobs.map(job => {
-        // Check if job ID is not a valid UUID format
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-        
-        let updatedJob = { ...job };
-        
-        if (!uuidRegex.test(job.id)) {
-          console.log(`Migrating job ID from ${job.id} to UUID`);
-          needsUpdate = true;
-          updatedJob.id = generateUUID();
-        }
-        
-        // Also migrate photo IDs
-        if (job.photos && job.photos.length > 0) {
-          const updatedPhotos = job.photos.map(photo => {
-            if (!uuidRegex.test(photo.id)) {
-              console.log(`Migrating photo ID from ${photo.id} to UUID`);
-              needsUpdate = true;
-              return {
-                ...photo,
-                id: generateUUID()
-              };
-            }
-            return photo;
-          });
-          updatedJob.photos = updatedPhotos;
-        }
-        
-        return updatedJob;
-      });
-      
-      if (needsUpdate) {
-        await AsyncStorage.setItem('proofly_jobs', JSON.stringify(updatedJobs));
-        console.log('Job and photo IDs migrated to UUID format');
-      }
-    } catch (error) {
-      console.error('Error migrating job IDs:', error);
-    }
-  };
-
   const checkAuthStatus = async () => {
     try {
-      // First migrate any existing jobs
-      await migrateJobIds();
+      // Run migration using centralized service
+      await migrationService.runMigrationIfNeeded();
       
       const user = await getCurrentUser();
       setIsAuthenticated(!!user);
@@ -730,11 +533,21 @@ export default function App() {
     }
   };
 
-  // Handle successful authentication
-  const handleAuthSuccess = async () => {
-    // Re-check auth status to update the state
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const handleAuthSuccess = React.useCallback(async () => {
     await checkAuthStatus();
-  };
+  }, []);
+
+  const handleSignOut = React.useCallback(() => {
+    setIsAuthenticated(false);
+  }, []);
+
+  const ProfileScreenWithSignOut = React.useCallback((props: any) => {
+    return <ProfileScreenWithNav {...props} onSignOut={handleSignOut} />;
+  }, []);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -746,62 +559,27 @@ export default function App() {
         <Stack.Navigator
           initialRouteName={isAuthenticated ? "Home" : "Auth"}
           screenOptions={{
-            headerStyle: {
-              backgroundColor: '#007AFF',
-            },
+            headerStyle: { backgroundColor: '#007AFF' },
             headerTintColor: '#fff',
-            headerTitleStyle: {
-              fontWeight: 'bold',
-            },
+            headerTitleStyle: { fontWeight: 'bold' },
           }}
         >
           {!isAuthenticated ? (
             <Stack.Screen 
               name="Auth" 
-              options={{ 
-                title: 'Welcome to Proofly',
-                headerLeft: () => null,
-              }}
+              options={{ title: 'Welcome to Proofly', headerLeft: () => null }}
             >
               {(props) => <AuthScreenWithNav {...props} onAuthSuccess={handleAuthSuccess} />}
             </Stack.Screen>
           ) : (
             <>
-              <Stack.Screen 
-                name="Home" 
-                component={HomeScreenWithNav}
-                options={{ 
-                  title: 'Proofly',
-                  headerLeft: () => null,
-                }}
-              />
-              <Stack.Screen 
-                name="JobDetails" 
-                component={JobDetailsScreenWithNav}
-                options={{ title: 'Job Details' }}
-              />
-              <Stack.Screen 
-                name="CreateJob" 
-                component={CreateJobScreenWithNav}
-                options={({ route }: any) => ({ 
-                  title: route.params?.editJob ? 'Edit Job' : 'New Job'
-                })}
-              />
-              <Stack.Screen 
-                name="Camera" 
-                component={CameraScreenWithNav}
-                options={{ title: 'Take Photos' }}
-              />
-              <Stack.Screen 
-                name="Signature" 
-                component={SignatureScreenWithNav}
-                options={{ title: 'Client Signature' }}
-              />
-              <Stack.Screen 
-                name="PDFGenerator" 
-                component={PDFGeneratorWithNav}
-                options={{ title: 'Generate Report' }}
-              />
+              <Stack.Screen name="Home" component={HomeScreenWithNav} options={{ title: 'Proofly', headerLeft: () => null }} />
+              <Stack.Screen name="JobDetails" component={JobDetailsScreenWithNav} options={{ title: 'Job Details' }} />
+              <Stack.Screen name="CreateJob" component={CreateJobScreenWithNav} options={({ route }: any) => ({ title: route.params?.editJob ? 'Edit Job' : 'New Job' })} />
+              <Stack.Screen name="Camera" component={CameraScreenWithNav} options={{ title: 'Take Photos' }} />
+              <Stack.Screen name="Signature" component={SignatureScreenWithNav} options={{ title: 'Client Signature' }} />
+              <Stack.Screen name="PDFGenerator" component={PDFGeneratorWithNav} options={{ title: 'Generate Report' }} />
+              <Stack.Screen name="Profile" component={ProfileScreenWithSignOut} options={{ title: 'Profile' }} />
             </>
           )}
         </Stack.Navigator>
@@ -811,125 +589,28 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 18,
-    color: '#666',
-  },
-  syncStatus: {
-    marginRight: 15,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 12,
-  },
-  syncStatusText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  authContainer: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  authContentContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  authHeader: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  authTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  authSubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  authForm: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  textInput: {
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-    borderRadius: 8,
-    padding: 16,
-    fontSize: 16,
-    color: '#333',
-  },
-  primaryButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  primaryButtonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  primaryButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  switchButton: {
-    alignItems: 'center',
-    marginTop: 24,
-    paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
-  },
-  switchButtonText: {
-    color: '#007AFF',
-    fontSize: 16,
-  },
-  trialInfo: {
-    backgroundColor: '#e8f5e8',
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  trialTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2d5a2d',
-    marginBottom: 8,
-  },
-  trialText: {
-    fontSize: 14,
-    color: '#2d5a2d',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
+  loadingText: { marginTop: 16, fontSize: 18, color: '#666' },
+  syncStatus: { marginRight: 15, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: 'rgba(255, 255, 255, 0.2)', borderRadius: 12 },
+  syncStatusText: { color: 'white', fontSize: 12, fontWeight: '500' },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
+  profileButton: { marginRight: 15, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  profileButtonText: { fontSize: 24 },
+  authContainer: { flex: 1, backgroundColor: '#f8f9fa' },
+  authContentContainer: { flexGrow: 1, justifyContent: 'center', padding: 20 },
+  authHeader: { alignItems: 'center', marginBottom: 40 },
+  authTitle: { fontSize: 32, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+  authSubtitle: { fontSize: 16, color: '#666', textAlign: 'center', lineHeight: 24 },
+  authForm: { backgroundColor: 'white', borderRadius: 12, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  inputGroup: { marginBottom: 20 },
+  label: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 8 },
+  textInput: { backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: '#e9ecef', borderRadius: 8, padding: 16, fontSize: 16, color: '#333' },
+  primaryButton: { backgroundColor: '#007AFF', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 10 },
+  primaryButtonDisabled: { backgroundColor: '#ccc' },
+  primaryButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  switchButton: { alignItems: 'center', marginTop: 24, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#e9ecef' },
+  switchButtonText: { color: '#007AFF', fontSize: 16 },
+  trialInfo: { backgroundColor: '#e8f5e8', borderRadius: 12, padding: 20, marginTop: 20, alignItems: 'center' },
+  trialTitle: { fontSize: 18, fontWeight: 'bold', color: '#2d5a2d', marginBottom: 8 },
+  trialText: { fontSize: 14, color: '#2d5a2d', textAlign: 'center', lineHeight: 20 },
 });

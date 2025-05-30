@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabaseHTTP, getCurrentUser } from './SupabaseHTTPClient';
 import { Job } from '../screens/HomeScreen';
 import { JobPhoto } from '../screens/CameraScreen';
+import { TIER_LIMITS } from '../utils/JobUtils';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 
@@ -453,15 +454,8 @@ class CloudSyncService {
         return { allowed: false, reason: 'User profile not found' };
       }
 
-      const limits: Record<string, number | null> = {
-        free: 20,
-        starter: 200,
-        professional: null,
-        business: null
-      };
-
       const tier = profile.subscription_tier;
-      const maxJobs = limits[tier] ?? limits.free; // Default to free tier if invalid
+      const maxJobs = TIER_LIMITS[tier as keyof typeof TIER_LIMITS]?.maxJobs ?? TIER_LIMITS.free.maxJobs;
       
       if (maxJobs === null) {
         return { allowed: true };
