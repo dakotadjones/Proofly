@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   Alert,
-  ScrollView,
   Modal,
+  TouchableOpacity,
 } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 import { Colors, Typography, Spacing, Sizes } from '../theme';
-import { Wrapper, Button, Input } from '../components/ui';
+import { Wrapper, Button, Input, KeyboardAvoidingWrapper } from '../components/ui';
 
 interface JobPhoto {
   id: string;
@@ -175,7 +175,7 @@ export default function SimpleSignatureScreen({
   `;
 
   return (
-    <ScrollView style={styles.Wrapper}>
+    <KeyboardAvoidingWrapper>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Complete Job</Text>
@@ -198,29 +198,53 @@ export default function SimpleSignatureScreen({
         <Text style={styles.sectionTitle}>How would you like to complete this job?</Text>
         
         <View style={styles.methodButtons}>
-          <Button
-            variant={completionMethod === 'in-person' ? 'primary' : 'outline'}
+          <TouchableOpacity
+            style={[
+              styles.methodButton,
+              completionMethod === 'in-person' ? styles.methodButtonActive : styles.methodButtonInactive
+            ]}
             onPress={() => setCompletionMethod('in-person')}
-            style={styles.methodButton}
           >
             <View style={styles.methodButtonContent}>
               <Text style={styles.methodButtonIcon}>✍️</Text>
-              <Text style={styles.methodButtonTitle}>In-Person Signature</Text>
-              <Text style={styles.methodButtonDesc}>Client signs here now</Text>
+              <Text style={[
+                styles.methodButtonTitle,
+                completionMethod === 'in-person' ? styles.methodButtonTitleActive : styles.methodButtonTitleInactive
+              ]}>
+                In-Person Signature
+              </Text>
+              <Text style={[
+                styles.methodButtonDesc,
+                completionMethod === 'in-person' ? styles.methodButtonDescActive : styles.methodButtonDescInactive
+              ]}>
+                Client signs here now
+              </Text>
             </View>
-          </Button>
+          </TouchableOpacity>
 
-          <Button
-            variant={completionMethod === 'remote' ? 'primary' : 'outline'}
+          <TouchableOpacity
+            style={[
+              styles.methodButton,
+              completionMethod === 'remote' ? styles.methodButtonActive : styles.methodButtonInactive
+            ]}
             onPress={() => setCompletionMethod('remote')}
-            style={styles.methodButton}
           >
             <View style={styles.methodButtonContent}>
               <Text style={styles.methodButtonIcon}>📱</Text>
-              <Text style={styles.methodButtonTitle}>Remote Approval</Text>
-              <Text style={styles.methodButtonDesc}>Email/text client to approve</Text>
+              <Text style={[
+                styles.methodButtonTitle,
+                completionMethod === 'remote' ? styles.methodButtonTitleActive : styles.methodButtonTitleInactive
+              ]}>
+                Remote Approval
+              </Text>
+              <Text style={[
+                styles.methodButtonDesc,
+                completionMethod === 'remote' ? styles.methodButtonDescActive : styles.methodButtonDescInactive
+              ]}>
+                Email/text client to approve
+              </Text>
             </View>
-          </Button>
+          </TouchableOpacity>
         </View>
       </Wrapper>
 
@@ -345,7 +369,7 @@ export default function SimpleSignatureScreen({
         animationType="slide"
         presentationStyle="pageSheet"
       >
-        <View style={styles.modalWrapper}>
+        <KeyboardAvoidingWrapper keyboardVerticalOffset={0}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Send Review Link</Text>
             <Button 
@@ -357,82 +381,80 @@ export default function SimpleSignatureScreen({
             </Button>
           </View>
 
-          <ScrollView style={styles.modalContent}>
-            {/* Contact Method Selection */}
-            <Wrapper variant="flat" style={styles.modalSection}>
-              <Text style={styles.modalSectionTitle}>How should we contact {clientName}?</Text>
-              
-              <View style={styles.contactMethodButtons}>
-                <Button
-                  variant={remoteContactMethod === 'email' ? 'primary' : 'outline'}
-                  onPress={() => setRemoteContactMethod('email')}
-                  style={styles.contactMethodButton}
-                >
-                  <View style={styles.contactMethodContent}>
-                    <Text style={styles.contactMethodIcon}>📧</Text>
-                    <Text style={styles.contactMethodText}>Email</Text>
-                  </View>
-                </Button>
+          {/* Contact Method Selection */}
+          <Wrapper variant="flat" style={styles.modalSection}>
+            <Text style={styles.modalSectionTitle}>How should we contact {clientName}?</Text>
+            
+            <View style={styles.contactMethodButtons}>
+              <Button
+                variant={remoteContactMethod === 'email' ? 'primary' : 'outline'}
+                onPress={() => setRemoteContactMethod('email')}
+                style={styles.contactMethodButton}
+              >
+                <View style={styles.contactMethodContent}>
+                  <Text style={styles.contactMethodIcon}>📧</Text>
+                  <Text style={styles.contactMethodText}>Email</Text>
+                </View>
+              </Button>
 
-                <Button
-                  variant={remoteContactMethod === 'sms' ? 'primary' : 'outline'}
-                  onPress={() => setRemoteContactMethod('sms')}
-                  style={styles.contactMethodButton}
-                >
-                  <View style={styles.contactMethodContent}>
-                    <Text style={styles.contactMethodIcon}>💬</Text>
-                    <Text style={styles.contactMethodText}>Text (SMS)</Text>
-                  </View>
-                </Button>
-              </View>
-            </Wrapper>
-
-            {/* Contact Info Input */}
-            <Wrapper variant="flat" style={styles.modalSection}>
-              <Text style={styles.modalSectionTitle}>
-                {remoteContactMethod === 'email' ? 'Email Address' : 'Phone Number'}
-              </Text>
-              
-              {remoteContactMethod === 'email' ? (
-                <Input
-                  placeholder="client@example.com"
-                  value={customEmail}
-                  onChangeText={setCustomEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              ) : (
-                <Input
-                  placeholder="(555) 123-4567"
-                  value={customPhone}
-                  onChangeText={setCustomPhone}
-                  keyboardType="phone-pad"
-                />
-              )}
-            </Wrapper>
-
-            {/* Preview */}
-            <Wrapper variant="flat" style={styles.modalSection}>
-              <Text style={styles.modalSectionTitle}>Preview Message</Text>
-              <View style={styles.previewBox}>
-                <Text style={styles.previewText}>
-                  {remoteContactMethod === 'email' ? 
-                    `Hi ${clientName}, we just finished your service. Please review our work: [Review Link]` :
-                    `Hi ${clientName}! Work complete. Please review: [Review Link]`
-                  }
-                </Text>
-              </View>
-            </Wrapper>
-
-            {/* Send Button */}
-            <View style={styles.modalButtonWrapper}>
-              <Button variant="success" onPress={sendRemoteSigningRequest} style={styles.modalSendButton}>
-                Send {remoteContactMethod === 'email' ? 'Email' : 'Text'}
+              <Button
+                variant={remoteContactMethod === 'sms' ? 'primary' : 'outline'}
+                onPress={() => setRemoteContactMethod('sms')}
+                style={styles.contactMethodButton}
+              >
+                <View style={styles.contactMethodContent}>
+                  <Text style={styles.contactMethodIcon}>💬</Text>
+                  <Text style={styles.contactMethodText}>Text (SMS)</Text>
+                </View>
               </Button>
             </View>
-          </ScrollView>
-        </View>
+          </Wrapper>
+
+          {/* Contact Info Input */}
+          <Wrapper variant="flat" style={styles.modalSection}>
+            <Text style={styles.modalSectionTitle}>
+              {remoteContactMethod === 'email' ? 'Email Address' : 'Phone Number'}
+            </Text>
+            
+            {remoteContactMethod === 'email' ? (
+              <Input
+                placeholder="client@example.com"
+                value={customEmail}
+                onChangeText={setCustomEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            ) : (
+              <Input
+                placeholder="(555) 123-4567"
+                value={customPhone}
+                onChangeText={setCustomPhone}
+                keyboardType="phone-pad"
+              />
+            )}
+          </Wrapper>
+
+          {/* Preview */}
+          <Wrapper variant="flat" style={styles.modalSection}>
+            <Text style={styles.modalSectionTitle}>Preview Message</Text>
+            <View style={styles.previewBox}>
+              <Text style={styles.previewText}>
+                {remoteContactMethod === 'email' ? 
+                  `Hi ${clientName}, we just finished your service. Please review our work: [Review Link]` :
+                  `Hi ${clientName}! Work complete. Please review: [Review Link]`
+                }
+              </Text>
+            </View>
+          </Wrapper>
+
+          {/* Send Button */}
+          <View style={styles.modalButtonWrapper}>
+            <Button variant="success" onPress={sendRemoteSigningRequest} style={styles.modalSendButton}>
+              Send {remoteContactMethod === 'email' ? 'Email' : 'Text'}
+            </Button>
+          </View>
+        </KeyboardAvoidingWrapper>
       </Modal>
 
       {/* Legal Disclaimer */}
@@ -442,15 +464,11 @@ export default function SimpleSignatureScreen({
           as agreed and authorizes payment according to the service terms.
         </Text>
       </Wrapper>
-    </ScrollView>
+    </KeyboardAvoidingWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  Wrapper: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
   header: {
     backgroundColor: Colors.primary,
     paddingTop: Spacing.statusBarOffset + Spacing.md,
@@ -505,6 +523,19 @@ const styles = StyleSheet.create({
   methodButton: {
     flex: 1,
     paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Sizes.radiusMedium,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  methodButtonActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  methodButtonInactive: {
+    backgroundColor: Colors.background,
+    borderColor: Colors.border,
   },
   methodButtonContent: {
     alignItems: 'center',
@@ -517,10 +548,24 @@ const styles = StyleSheet.create({
     ...Typography.label,
     fontWeight: 'bold',
     marginBottom: Spacing.xs,
+    textAlign: 'center',
+  },
+  methodButtonTitleActive: {
+    color: Colors.textInverse,
+  },
+  methodButtonTitleInactive: {
+    color: Colors.textPrimary,
   },
   methodButtonDesc: {
     ...Typography.caption,
     textAlign: 'center',
+  },
+  methodButtonDescActive: {
+    color: Colors.textInverse,
+    opacity: 0.9,
+  },
+  methodButtonDescInactive: {
+    color: Colors.textSecondary,
     opacity: 0.8,
   },
   // In-Person Signature Styles
@@ -599,10 +644,6 @@ const styles = StyleSheet.create({
     // Button component handles styling
   },
   // Modal Styles
-  modalWrapper: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -619,11 +660,8 @@ const styles = StyleSheet.create({
   modalCloseButton: {
     paddingHorizontal: 0,
   },
-  modalContent: {
-    flex: 1,
-    padding: Spacing.screenPadding,
-  },
   modalSection: {
+    marginHorizontal: Spacing.screenPadding,
     marginBottom: Spacing.lg,
   },
   modalSectionTitle: {
@@ -664,6 +702,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   modalButtonWrapper: {
+    marginHorizontal: Spacing.screenPadding,
     marginTop: Spacing.lg,
   },
   modalSendButton: {

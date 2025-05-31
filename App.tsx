@@ -1,9 +1,9 @@
-// App.tsx - Updated with silent background sync
+// App.tsx - Updated with KeyboardAvoidingWrapper throughout
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { TouchableOpacity, Text, View, ActivityIndicator, StyleSheet, Alert, ScrollView, TextInput } from 'react-native';
+import { TouchableOpacity, Text, View, ActivityIndicator, StyleSheet, Alert, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-gesture-handler';
 
@@ -25,6 +25,9 @@ import { revenueCatService } from './src/services/RevenueCatService';
 
 // Import utilities
 import { generateUUID, calculateJobStatus } from './src/utils/JobUtils';
+
+// Import UI components
+import { KeyboardAvoidingWrapper, Wrapper, Input, Button } from './src/components/ui';
 
 // Types
 export type RootStackParamList = {
@@ -60,7 +63,7 @@ function LoadingScreen() {
   );
 }
 
-// Auth Screen (unchanged)
+// Updated Auth Screen with KeyboardAvoidingWrapper
 function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -72,21 +75,46 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
     phone: ''
   });
 
-  const handleSignIn = async () => {
+  const validateForm = () => {
     if (!formData.email || !formData.password) {
       Alert.alert('Error', 'Email and password are required');
-      return;
+      return false;
     }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return false;
+    }
+    
+    if (formData.password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return false;
+    }
+    
+    if (isSignUp && !formData.fullName.trim()) {
+      Alert.alert('Error', 'Full name is required');
+      return false;
+    }
+    
+    return true;
+  };
+
+  const handleSignIn = async () => {
+    if (!validateForm()) return;
 
     setLoading(true);
     try {
-      const result = await supabase.signIn(formData.email, formData.password);
+      const result = await supabase.signIn(formData.email.trim(), formData.password);
       if (result.error) {
         Alert.alert('Sign In Error', result.error);
       } else {
+        console.log('Sign in successful:', result.user?.email);
         onAuthSuccess();
       }
     } catch (error) {
+      console.error('Sign in error:', error);
       Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
@@ -94,18 +122,19 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
   };
 
   const handleSignUp = async () => {
-    if (!formData.email || !formData.password || !formData.fullName) {
-      Alert.alert('Error', 'Email, password, and full name are required');
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
     try {
-      const result = await supabase.signUp(formData.email, formData.password, {
-        full_name: formData.fullName,
-        company_name: formData.companyName,
-        phone: formData.phone,
-      });
+      const result = await supabase.signUp(
+        formData.email.trim(), 
+        formData.password, 
+        {
+          full_name: formData.fullName.trim(),
+          company_name: formData.companyName.trim() || null,
+          phone: formData.phone.trim() || null,
+        }
+      );
 
       if (result.error) {
         Alert.alert('Sign Up Error', result.error);
@@ -113,18 +142,67 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
         Alert.alert(
           'Success!', 
           'Account created! Please check your email to verify your account.',
-          [{ text: 'OK', onPress: () => setIsSignUp(false) }]
+          [{ 
+            text: 'OK', 
+            onPress: () => {
+              setIsSignUp(false);
+              // Clear form except email for easier sign in
+              setFormData(prev => ({
+                ...prev,
+                password: '',
+                fullName: '',
+                companyName: '',
+                phone: ''
+              }));
+            }
+          }]
         );
       }
     } catch (error) {
+      console.error('Sign up error:', error);
       Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }
   };
 
+  const resetPassword = async () => {
+    if (!formData.email.trim()) {
+      Alert.alert('Error', 'Please enter your email address first');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.resetPasswordForEmail(formData.email.trim());
+      
+      if (error) {
+        Alert.alert('Error', error);
+      } else {
+        Alert.alert(
+          'Password Reset Email Sent', 
+          `Check your email (${formData.email}) for password reset instructions.`
+        );
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
+      Alert.alert('Error', 'Failed to send password reset email');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <ScrollView style={styles.authWrapper} contentContainerStyle={styles.authContentWrapper}>
+    <KeyboardAvoidingWrapper 
+      keyboardVerticalOffset={0} // No header for auth screen
+      contentContainerStyle={styles.authContentWrapper}
+    >
       <View style={styles.authHeader}>
         <Text style={styles.authTitle}>
           {isSignUp ? 'Create Account' : 'Welcome Back'}
@@ -137,97 +215,120 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
         </Text>
       </View>
 
-      <View style={styles.authForm}>
+      <Wrapper variant="elevated" style={styles.authForm}>
         {isSignUp && (
           <>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Full Name *</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Your full name"
-                value={formData.fullName}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, fullName: text }))}
-                autoCapitalize="words"
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Company Name</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Your company name (optional)"
-                value={formData.companyName}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, companyName: text }))}
-                autoCapitalize="words"
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone Number</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="(555) 123-4567"
-                value={formData.phone}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
-                keyboardType="phone-pad"
-              />
-            </View>
+            <Input
+              label="Full Name"
+              placeholder="Your full name"
+              value={formData.fullName}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, fullName: text }))}
+              autoCapitalize="words"
+              autoCorrect={false}
+              editable={!loading}
+              required
+            />
+
+            <Input
+              label="Company Name"
+              placeholder="Your company name (optional)"
+              value={formData.companyName}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, companyName: text }))}
+              autoCapitalize="words"
+              autoCorrect={false}
+              editable={!loading}
+            />
+
+            <Input
+              label="Phone Number"
+              placeholder="(555) 123-4567"
+              value={formData.phone}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
+              keyboardType="phone-pad"
+              autoCorrect={false}
+              editable={!loading}
+            />
           </>
         )}
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email *</Text>
-          <TextInput
-            style={styles.textInput}
-            placeholder="your@email.com"
-            value={formData.email}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
+        <Input
+          label="Email Address"
+          placeholder="your@email.com"
+          value={formData.email}
+          onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!loading}
+          required
+        />
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Password *</Text>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Minimum 6 characters"
-            value={formData.password}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-        </View>
+        <Input
+          label="Password"
+          placeholder="Minimum 6 characters"
+          value={formData.password}
+          onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!loading}
+          required
+        />
 
-        <TouchableOpacity
-          style={[styles.primaryButton, loading && styles.primaryButtonDisabled]}
+        <Button
+          variant="primary"
           onPress={isSignUp ? handleSignUp : handleSignIn}
           disabled={loading}
+          loading={loading}
+          style={styles.primaryButton}
         >
-          <Text style={styles.primaryButtonText}>
-            {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
-          </Text>
-        </TouchableOpacity>
+          {isSignUp ? 'Create Account' : 'Sign In'}
+        </Button>
 
-        <TouchableOpacity 
-          style={styles.switchButton}
-          onPress={() => setIsSignUp(!isSignUp)}
-        >
-          <Text style={styles.switchButtonText}>
-            {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+        {!isSignUp && (
+          <Button 
+            variant="ghost" 
+            onPress={resetPassword}
+            disabled={loading}
+            style={styles.forgotButton}
+          >
+            Forgot Password?
+          </Button>
+        )}
+
+        <View style={styles.switchMode}>
+          <Text style={styles.switchModeText}>
+            {isSignUp ? 'Already have an account?' : "Don't have an account?"}
           </Text>
-        </TouchableOpacity>
-      </View>
+          <Button 
+            variant="ghost" 
+            onPress={() => setIsSignUp(!isSignUp)} 
+            disabled={loading}
+            size="small"
+            style={styles.switchButton}
+          >
+            {isSignUp ? 'Sign In' : 'Sign Up'}
+          </Button>
+        </View>
+      </Wrapper>
 
       {isSignUp && (
-        <View style={styles.trialInfo}>
+        <Wrapper variant="flat" style={styles.trialInfo}>
           <Text style={styles.trialTitle}>🎉 Start with 20 Free Jobs!</Text>
           <Text style={styles.trialText}>
             No credit card required. Full access to all features including cloud backup, 
             photo documentation, digital signatures, and PDF reports.
           </Text>
-        </View>
+          <View style={styles.featureList}>
+            <Text style={styles.featureItem}>✅ 20 jobs included</Text>
+            <Text style={styles.featureItem}>✅ Unlimited photos per job</Text>
+            <Text style={styles.featureItem}>✅ Professional PDF reports</Text>
+            <Text style={styles.featureItem}>✅ Digital signatures</Text>
+            <Text style={styles.featureItem}>✅ Cloud backup & sync</Text>
+          </View>
+        </Wrapper>
       )}
-    </ScrollView>
+    </KeyboardAvoidingWrapper>
   );
 }
 
@@ -611,7 +712,7 @@ function JobDetailsScreenWithNav({ route, navigation }: any) {
     onTakePhotos={(job: Job) => navigation.navigate('Camera', { job })}
     onGetSignature={(job: Job) => navigation.navigate('Signature', { job })}
     onGeneratePDF={(job: Job) => navigation.navigate('PDFGenerator', { job })}
-    onJobUpdate={handleJobUpdate} // Add this prop
+    onJobUpdate={handleJobUpdate}
   />;
 }
 
@@ -743,40 +844,162 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  loadingWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
-  loadingText: { marginTop: 16, fontSize: 18, color: '#666' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', marginRight: 15 },
-  syncFailureIndicator: { marginRight: 10 },
+  loadingWrapper: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    backgroundColor: '#f8f9fa' 
+  },
+  loadingText: { 
+    marginTop: 16, 
+    fontSize: 18, 
+    color: '#666' 
+  },
+  headerRight: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginRight: 15 
+  },
+  syncFailureIndicator: { 
+    marginRight: 10 
+  },
   failureDot: { 
     width: 8, 
     height: 8, 
     borderRadius: 4, 
     backgroundColor: '#FF3B30' 
   },
-  profileButton: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  profileButtonText: { fontSize: 24 },
-  authWrapper: { flex: 1, backgroundColor: '#f8f9fa' },
-  authContentWrapper: { flexGrow: 1, justifyContent: 'center', padding: 20 },
-  authHeader: { alignItems: 'center', marginBottom: 40 },
-  authTitle: { fontSize: 32, fontWeight: 'bold', color: '#333', marginBottom: 8 },
-  authSubtitle: { fontSize: 16, color: '#666', textAlign: 'center', lineHeight: 24 },
-  authForm: { backgroundColor: 'white', borderRadius: 12, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  inputGroup: { marginBottom: 20 },
-  label: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 8 },
-  textInput: { backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: '#e9ecef', borderRadius: 8, padding: 16, fontSize: 16, color: '#333' },
-  primaryButton: { backgroundColor: '#007AFF', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 10 },
-  primaryButtonDisabled: { backgroundColor: '#ccc' },
-  primaryButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
-  switchButton: { alignItems: 'center', marginTop: 24, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#e9ecef' },
-  switchButtonText: { color: '#007AFF', fontSize: 16 },
-  trialInfo: { backgroundColor: '#e8f5e8', borderRadius: 12, padding: 20, marginTop: 20, alignItems: 'center' },
-  trialTitle: { fontSize: 18, fontWeight: 'bold', color: '#2d5a2d', marginBottom: 8 },
-  trialText: { fontSize: 14, color: '#2d5a2d', textAlign: 'center', lineHeight: 20 },
-  upgradeWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f8f9fa' },
-  upgradeTitle: { fontSize: 24, fontWeight: 'bold', color: '#333', marginBottom: 20 },
-  upgradeText: { fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 30, lineHeight: 24 },
-  upgradeButton: { backgroundColor: '#34C759', padding: 16, borderRadius: 8, minWidth: 200, alignItems: 'center', marginBottom: 15 },
-  upgradeButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
-  closeButton: { backgroundColor: '#666', padding: 12, borderRadius: 8, minWidth: 200, alignItems: 'center' },
-  closeButtonText: { color: 'white', fontSize: 16 },
+  profileButton: { 
+    paddingHorizontal: 8, 
+    paddingVertical: 4, 
+    borderRadius: 12 
+  },
+  profileButtonText: { 
+    fontSize: 24 
+  },
+  authContentWrapper: { 
+    flexGrow: 1, 
+    justifyContent: 'center', 
+    padding: 20,
+    minHeight: '100%'
+  },
+  authHeader: { 
+    alignItems: 'center', 
+    marginBottom: 40 
+  },
+  authTitle: { 
+    fontSize: 32, 
+    fontWeight: 'bold', 
+    color: '#333', 
+    marginBottom: 8,
+    textAlign: 'center'
+  },
+  authSubtitle: { 
+    fontSize: 16, 
+    color: '#666', 
+    textAlign: 'center', 
+    lineHeight: 24,
+    paddingHorizontal: 20
+  },
+  authForm: { 
+    marginBottom: 20
+  },
+  primaryButton: { 
+    marginTop: 16
+  },
+  forgotButton: { 
+    marginTop: 16, 
+    alignSelf: 'center'
+  },
+  switchMode: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginTop: 24, 
+    paddingTop: 24, 
+    borderTopWidth: 1, 
+    borderTopColor: '#e9ecef' 
+  },
+  switchModeText: { 
+    fontSize: 16, 
+    color: '#666', 
+    marginRight: 8 
+  },
+  switchButton: { 
+    paddingHorizontal: 0 
+  },
+  trialInfo: { 
+    alignItems: 'center', 
+    marginTop: 20 
+  },
+  trialTitle: { 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    color: '#10B981', 
+    marginBottom: 8,
+    textAlign: 'center'
+  },
+  trialText: { 
+    fontSize: 14, 
+    color: '#10B981', 
+    textAlign: 'center', 
+    lineHeight: 20,
+    marginBottom: 16,
+    opacity: 0.8
+  },
+  featureList: { 
+    alignItems: 'flex-start', 
+    width: '100%' 
+  },
+  featureItem: { 
+    fontSize: 14, 
+    color: '#10B981', 
+    marginBottom: 4, 
+    fontWeight: '500',
+    opacity: 0.9
+  },
+  upgradeWrapper: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 20, 
+    backgroundColor: '#f8f9fa' 
+  },
+  upgradeTitle: { 
+    fontSize: 24, 
+    fontWeight: 'bold', 
+    color: '#333', 
+    marginBottom: 20 
+  },
+  upgradeText: { 
+    fontSize: 16, 
+    color: '#666', 
+    textAlign: 'center', 
+    marginBottom: 30, 
+    lineHeight: 24 
+  },
+  upgradeButton: { 
+    backgroundColor: '#34C759', 
+    padding: 16, 
+    borderRadius: 8, 
+    minWidth: 200, 
+    alignItems: 'center', 
+    marginBottom: 15 
+  },
+  upgradeButtonText: { 
+    color: 'white', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
+  closeButton: { 
+    backgroundColor: '#666', 
+    padding: 12, 
+    borderRadius: 8, 
+    minWidth: 200, 
+    alignItems: 'center' 
+  },
+  closeButtonText: { 
+    color: 'white', 
+    fontSize: 16 
+  },
 });

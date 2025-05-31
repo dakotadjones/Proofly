@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Alert,
 } from 'react-native';
 import { getCurrentUser, supabase } from '../services/SupabaseHTTPClient';
@@ -12,7 +11,7 @@ import { getTierDisplayName, getTierColor, getTierLimits } from '../utils/JobUti
 import { mvpStorageService } from '../services/MVPStorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Typography, Spacing, Sizes } from '../theme';
-import { Wrapper, Button, Badge, LoadingSpinner } from '../components/ui';
+import { Wrapper, Button, Badge, LoadingSpinner, KeyboardAvoidingWrapper } from '../components/ui';
 
 interface UserProfile {
   id: string;
@@ -162,7 +161,7 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
 
   if (loading) {
     return (
-      <View style={styles.Wrapper}>
+      <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
           <Text style={styles.headerSubtitle}>Account & Settings</Text>
@@ -174,7 +173,7 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
 
   if (!profile) {
     return (
-      <View style={styles.Wrapper}>
+      <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
           <Text style={styles.headerSubtitle}>Account & Settings</Text>
@@ -190,7 +189,7 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
   }
 
   return (
-    <ScrollView style={styles.Wrapper}>
+    <KeyboardAvoidingWrapper>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
@@ -409,12 +408,12 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
           Protected by advanced rate limiting and abuse prevention
         </Text>
       </View>
-    </ScrollView>
+    </KeyboardAvoidingWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  Wrapper: {
+  container: {
     flex: 1,
     backgroundColor: Colors.background,
   },

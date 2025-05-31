@@ -1,10 +1,9 @@
-// src/screens/CreateJobScreen.tsx - Updated with RevenueCat integration
+// src/screens/CreateJobScreen.tsx - Updated with KeyboardAvoidingWrapper
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Alert,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
@@ -15,7 +14,7 @@ import { validateJobData } from '../utils/JobUtils';
 import { revenueCatService } from '../services/RevenueCatService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Typography, Spacing, Sizes } from '../theme';
-import { Input, Button, Wrapper } from '../components/ui';
+import { Input, Button, Wrapper, KeyboardAvoidingWrapper } from '../components/ui';
 
 const jobSchema = z.object({
   clientName: z.string().min(1, 'Client name is required'),
@@ -30,7 +29,7 @@ export type JobFormData = z.infer<typeof jobSchema>;
 
 interface CreateJobScreenProps {
   onJobCreated?: (data: JobFormData) => void;
-  onUpgrade?: () => void;  // Added this prop
+  onUpgrade?: () => void;
   editJob?: Job;
 }
 
@@ -196,7 +195,7 @@ export default function CreateJobScreen({ onJobCreated, onUpgrade, editJob }: Cr
   const tierInfo = revenueCatService.getTierInfo(userTier);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <KeyboardAvoidingWrapper contentContainerStyle={styles.contentContainer}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>{editJob ? 'Edit Job' : 'New Job'}</Text>
@@ -378,15 +377,11 @@ export default function CreateJobScreen({ onJobCreated, onUpgrade, editJob }: Cr
           </View>
         )}
       </Wrapper>
-    </ScrollView>
+    </KeyboardAvoidingWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
   contentContainer: {
     flexGrow: 1,
   },
@@ -450,7 +445,7 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     margin: Spacing.screenPadding,
-    marginTop: -Spacing.lg, // Fixed: removed showUpgradeWarning reference
+    marginTop: -Spacing.lg,
   },
   textArea: {
     minHeight: 60,

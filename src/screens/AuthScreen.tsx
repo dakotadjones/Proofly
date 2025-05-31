@@ -4,13 +4,10 @@ import {
   Text,
   StyleSheet,
   Alert,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { supabase } from '../services/SupabaseHTTPClient';
 import { Colors, Typography, Spacing, Sizes } from '../theme';
-import { Input, Button, Wrapper } from '../components/ui';
+import { Input, Button, Wrapper, KeyboardAvoidingWrapper } from '../components/ui';
 
 interface AuthScreenProps {
   onAuthSuccess: () => void;
@@ -176,185 +173,176 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.Wrapper} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <KeyboardAvoidingWrapper 
+      keyboardVerticalOffset={0} // No header offset needed for auth
+      contentContainerStyle={styles.scrollWrapper}
     >
-      <ScrollView 
-        contentContainerStyle={styles.scrollWrapper}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>
-            {isSignUp ? 'Create Account' : 'Welcome Back'}
-          </Text>
-          <Text style={styles.subtitle}>
-            {isSignUp 
-              ? 'Start documenting your service jobs professionally' 
-              : 'Sign in to your Proofly account'
-            }
-          </Text>
-        </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>
+          {isSignUp ? 'Create Account' : 'Welcome Back'}
+        </Text>
+        <Text style={styles.subtitle}>
+          {isSignUp 
+            ? 'Start documenting your service jobs professionally' 
+            : 'Sign in to your Proofly account'
+          }
+        </Text>
+      </View>
 
-        {/* Form */}
-        <Wrapper variant="elevated" style={styles.formWrapper}>
-          {isSignUp && (
-            <>
-              <Input
-                label="Full Name"
-                placeholder="Your full name"
-                value={formData.fullName}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, fullName: text }))}
-                autoCapitalize="words"
-                autoCorrect={false}
-                editable={!loading}
-                required
-              />
+      {/* Form */}
+      <Wrapper variant="elevated" style={styles.formWrapper}>
+        {isSignUp && (
+          <>
+            <Input
+              label="Full Name"
+              placeholder="Your full name"
+              value={formData.fullName}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, fullName: text }))}
+              autoCapitalize="words"
+              autoCorrect={false}
+              editable={!loading}
+              required
+            />
 
-              <Input
-                label="Company Name"
-                placeholder="Your company name (optional)"
-                value={formData.companyName}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, companyName: text }))}
-                autoCapitalize="words"
-                autoCorrect={false}
-                editable={!loading}
-              />
+            <Input
+              label="Company Name"
+              placeholder="Your company name (optional)"
+              value={formData.companyName}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, companyName: text }))}
+              autoCapitalize="words"
+              autoCorrect={false}
+              editable={!loading}
+            />
 
-              <Input
-                label="Phone Number"
-                placeholder="(555) 123-4567"
-                value={formData.phone}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
-                keyboardType="phone-pad"
-                autoCorrect={false}
-                editable={!loading}
-              />
-            </>
-          )}
+            <Input
+              label="Phone Number"
+              placeholder="(555) 123-4567"
+              value={formData.phone}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
+              keyboardType="phone-pad"
+              autoCorrect={false}
+              editable={!loading}
+            />
+          </>
+        )}
 
-          <Input
-            label="Email Address"
-            placeholder="your@email.com"
-            value={formData.email}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="email"
-            editable={!loading}
-            required
-          />
+        <Input
+          label="Email Address"
+          placeholder="your@email.com"
+          value={formData.email}
+          onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
+          editable={!loading}
+          required
+        />
 
-          <Input
-            label="Password"
-            placeholder="Minimum 6 characters"
-            value={formData.password}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="password"
-            editable={!loading}
-            required
-          />
+        <Input
+          label="Password"
+          placeholder="Minimum 6 characters"
+          value={formData.password}
+          onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="password"
+          editable={!loading}
+          required
+        />
 
-          {/* Primary Action Button */}
-          <Button
-            variant="primary"
-            onPress={isSignUp ? signUp : signIn}
+        {/* Primary Action Button */}
+        <Button
+          variant="primary"
+          onPress={isSignUp ? signUp : signIn}
+          disabled={loading}
+          loading={loading}
+          style={styles.primaryButton}
+        >
+          {isSignUp ? 'Create Account' : 'Sign In'}
+        </Button>
+
+        {/* Forgot Password */}
+        {!isSignUp && (
+          <Button 
+            variant="ghost" 
+            onPress={resetPassword}
             disabled={loading}
-            loading={loading}
-            style={styles.primaryButton}
+            style={styles.forgotButton}
+            textStyle={styles.forgotButtonText}
           >
-            {isSignUp ? 'Create Account' : 'Sign In'}
+            Forgot Password?
           </Button>
+        )}
 
-          {/* Forgot Password */}
-          {!isSignUp && (
-            <Button 
-              variant="ghost" 
-              onPress={resetPassword}
-              disabled={loading}
-              style={styles.forgotButton}
-              textStyle={styles.forgotButtonText}
-            >
-              Forgot Password?
-            </Button>
-          )}
+        {/* Clear Form Button (for testing) */}
+        {__DEV__ && (
+          <Button 
+            variant="outline" 
+            onPress={clearForm}
+            disabled={loading}
+            style={styles.clearButton}
+            size="small"
+          >
+            Clear Form (Dev)
+          </Button>
+        )}
 
-          {/* Clear Form Button (for testing) */}
-          {__DEV__ && (
-            <Button 
-              variant="outline" 
-              onPress={clearForm}
-              disabled={loading}
-              style={styles.clearButton}
-              size="small"
-            >
-              Clear Form (Dev)
-            </Button>
-          )}
+        {/* Switch Mode */}
+        <View style={styles.switchMode}>
+          <Text style={styles.switchModeText}>
+            {isSignUp ? 'Already have an account?' : "Don't have an account?"}
+          </Text>
+          <Button 
+            variant="ghost" 
+            onPress={switchMode} 
+            disabled={loading}
+            size="small"
+            style={styles.switchButton}
+            textStyle={styles.switchButtonText}
+          >
+            {isSignUp ? 'Sign In' : 'Sign Up'}
+          </Button>
+        </View>
+      </Wrapper>
 
-          {/* Switch Mode */}
-          <View style={styles.switchMode}>
-            <Text style={styles.switchModeText}>
-              {isSignUp ? 'Already have an account?' : "Don't have an account?"}
-            </Text>
-            <Button 
-              variant="ghost" 
-              onPress={switchMode} 
-              disabled={loading}
-              size="small"
-              style={styles.switchButton}
-              textStyle={styles.switchButtonText}
-            >
-              {isSignUp ? 'Sign In' : 'Sign Up'}
-            </Button>
+      {/* Free Trial Info */}
+      {isSignUp && (
+        <Wrapper variant="flat" style={styles.trialWrapper}>
+          <Text style={styles.trialTitle}>🎉 Start with 20 Free Jobs!</Text>
+          <Text style={styles.trialText}>
+            No credit card required. Full access to all features including cloud backup, 
+            photo documentation, digital signatures, and PDF reports.
+          </Text>
+          <View style={styles.featureList}>
+            <Text style={styles.featureItem}>✅ 20 jobs included</Text>
+            <Text style={styles.featureItem}>✅ Unlimited photos per job</Text>
+            <Text style={styles.featureItem}>✅ Professional PDF reports</Text>
+            <Text style={styles.featureItem}>✅ Digital signatures</Text>
+            <Text style={styles.featureItem}>✅ Cloud backup & sync</Text>
           </View>
         </Wrapper>
+      )}
 
-        {/* Free Trial Info */}
-        {isSignUp && (
-          <Wrapper variant="flat" style={styles.trialWrapper}>
-            <Text style={styles.trialTitle}>🎉 Start with 20 Free Jobs!</Text>
-            <Text style={styles.trialText}>
-              No credit Wrapper required. Full access to all features including cloud backup, 
-              photo documentation, digital signatures, and PDF reports.
-            </Text>
-            <View style={styles.featureList}>
-              <Text style={styles.featureItem}>✅ 20 jobs included</Text>
-              <Text style={styles.featureItem}>✅ Unlimited photos per job</Text>
-              <Text style={styles.featureItem}>✅ Professional PDF reports</Text>
-              <Text style={styles.featureItem}>✅ Digital signatures</Text>
-              <Text style={styles.featureItem}>✅ Cloud backup & sync</Text>
-            </View>
-          </Wrapper>
-        )}
-
-        {/* Connection Status (for debugging) */}
-        {__DEV__ && (
-          <Wrapper variant="flat" style={styles.debugWrapper}>
-            <Text style={styles.debugTitle}>Debug Info</Text>
-            <Text style={styles.debugText}>
-              Environment: {process.env.EXPO_PUBLIC_APP_ENV || 'unknown'}
-            </Text>
-            <Text style={styles.debugText}>
-              Supabase URL: {process.env.EXPO_PUBLIC_SUPABASE_URL ? 'configured' : 'missing'}
-            </Text>
-          </Wrapper>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      {/* Connection Status (for debugging) */}
+      {__DEV__ && (
+        <Wrapper variant="flat" style={styles.debugWrapper}>
+          <Text style={styles.debugTitle}>Debug Info</Text>
+          <Text style={styles.debugText}>
+            Environment: {process.env.EXPO_PUBLIC_APP_ENV || 'unknown'}
+          </Text>
+          <Text style={styles.debugText}>
+            Supabase URL: {process.env.EXPO_PUBLIC_SUPABASE_URL ? 'configured' : 'missing'}
+          </Text>
+        </Wrapper>
+      )}
+    </KeyboardAvoidingWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  Wrapper: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
   scrollWrapper: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -459,7 +447,7 @@ const styles = StyleSheet.create({
   debugText: {
     ...Typography.caption,
     color: Colors.warning,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontFamily: 'monospace',
     marginBottom: Spacing.xs,
   },
 });

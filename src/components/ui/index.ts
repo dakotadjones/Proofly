@@ -6,3 +6,4 @@ export { LoadingSpinner } from './LoadingSpinner';
 export { EmptyState } from './EmptyState';
 export { Badge } from './Badge';
 export { Wrapper } from './Wrapper';
+export { KeyboardAvoidingWrapper } from './KeyboardAvoidingWrapper';
