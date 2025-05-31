@@ -144,13 +144,17 @@ export default function JobDetailsScreen({
   return (
     <ScrollView style={styles.Wrapper}>
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>{job.clientName}</Text>
-          <Text style={styles.headerSubtitle}>{job.serviceType}</Text>
-        </View>
-        <JobStatusBadge status={job.status} size="medium" />
-      </View>
+<View style={styles.header}>
+  <View style={styles.headerContent}>
+    <Text style={styles.headerTitle}>{job.clientName}</Text>
+    <Text style={styles.headerSubtitle}>{job.serviceType}</Text>
+  </View>
+  <JobStatusBadge 
+    status={job.status} 
+    size="medium" 
+    onDarkBackground={true}  // This is the key change!
+  />
+</View>
 
       {/* Status Overview */}
       <Wrapper variant="elevated" style={styles.statusWrapper}>

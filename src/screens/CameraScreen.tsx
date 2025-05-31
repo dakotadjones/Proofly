@@ -192,7 +192,7 @@ export default function CameraScreen({
 
   if (permission === null) {
     return (
-      <View style={styles.Wrapper}>
+      <View style={styles.container}>
         <Text style={styles.messageText}>Requesting camera permissions...</Text>
       </View>
     );
@@ -200,8 +200,8 @@ export default function CameraScreen({
 
   if (!permission.granted) {
     return (
-      <View style={styles.Wrapper}>
-        <View style={styles.permissionWrapper}>
+      <View style={styles.container}>
+        <View style={styles.permissionContainer}>
           <Text style={styles.permissionTitle}>Camera Permission Required</Text>
           <Text style={styles.permissionMessage}>
             Proofly needs camera access to take photos for job documentation.
@@ -215,7 +215,7 @@ export default function CameraScreen({
   }
 
   return (
-    <View style={styles.Wrapper}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Job Photos</Text>
@@ -246,7 +246,7 @@ export default function CameraScreen({
       </View>
 
       {/* Camera View */}
-      <View style={styles.cameraWrapper}>
+      <View style={styles.cameraContainer}>
         <CameraView
           style={styles.camera}
           facing={cameraType}
@@ -255,30 +255,26 @@ export default function CameraScreen({
         />
         
         <View style={styles.cameraOverlay}>
-          <Button
-            variant="ghost"
-            size="small"
+          <TouchableOpacity
+            style={styles.flipButton}
             onPress={() => {
               setCameraType(cameraType === 'back' ? 'front' : 'back');
             }}
-            style={styles.flipButton}
-            textStyle={styles.flipButtonText}
           >
-            Flip
-          </Button>
+            <Text style={styles.flipButtonText}>Flip</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
       {/* Camera Controls */}
       <View style={styles.controls}>
-        <Button 
-          variant="outline" 
-          size="small" 
+        <TouchableOpacity 
+          style={styles.galleryButton}
           onPress={pickImage}
-          style={styles.controlButton}
         >
-          Gallery
-        </Button>
+          <Text style={styles.galleryButtonText}>📁</Text>
+          <Text style={styles.galleryButtonLabel}>Gallery</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity 
           style={[styles.captureButton, !isCameraReady && styles.captureButtonDisabled]} 
@@ -288,26 +284,34 @@ export default function CameraScreen({
           <View style={[styles.captureButtonInner, !isCameraReady && styles.captureButtonInnerDisabled]} />
         </TouchableOpacity>
 
-        <Button 
-          variant="success" 
-          size="small" 
+        <TouchableOpacity 
+          style={styles.saveButton}
           onPress={completeJob}
-          style={styles.controlButton}
         >
-          Save Photos
-        </Button>
+          <Text style={styles.saveButtonText}>✓</Text>
+          <Text style={styles.saveButtonLabel}>Save</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Photo Preview */}
       {photos.length > 0 && (
-        <View style={styles.photoPreviewWrapper}>
-          <ScrollView horizontal style={styles.photoPreview} showsHorizontalScrollIndicator={false}>
+        <View style={styles.photoPreviewContainer}>
+          <ScrollView 
+            horizontal 
+            style={styles.photoPreview} 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.photoPreviewContent}
+          >
             {photos.map((photo) => (
               <View key={photo.id} style={styles.photoPreviewItem}>
                 <Image source={{ uri: photo.uri }} style={styles.photoPreviewImage} />
-                <Badge variant="primary" size="small" style={styles.photoTypeBadge}>
-                  {photo.type}
-                </Badge>
+                <View style={styles.photoTypeBadgeContainer}>
+                  <View style={styles.photoTypeBadge}>
+                    <Text style={styles.photoTypeBadgeText}>
+                      {photo.type.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
                 <TouchableOpacity
                   style={styles.deletePhotoButton}
                   onPress={() => deletePhoto(photo.id)}
@@ -324,7 +328,7 @@ export default function CameraScreen({
 }
 
 const styles = StyleSheet.create({
-  Wrapper: {
+  container: {
     flex: 1,
     backgroundColor: Colors.gray900,
   },
@@ -333,7 +337,7 @@ const styles = StyleSheet.create({
     color: Colors.textInverse,
     textAlign: 'center',
   },
-  permissionWrapper: {
+  permissionContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -399,7 +403,7 @@ const styles = StyleSheet.create({
     color: Colors.textInverse,
     fontWeight: 'bold',
   },
-  cameraWrapper: {
+  cameraContainer: {
     flex: 1,
     margin: Spacing.sm,
     borderRadius: Sizes.radiusMedium,
@@ -420,10 +424,15 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
   },
   flipButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Sizes.radiusSmall,
   },
   flipButtonText: {
     color: Colors.textInverse,
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   controls: {
     flexDirection: 'row',
@@ -433,8 +442,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPadding,
     backgroundColor: Colors.gray800,
   },
-  controlButton: {
-    minWidth: 80,
+  galleryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Sizes.radiusMedium,
+    minWidth: 70,
+  },
+  galleryButtonText: {
+    fontSize: 24,
+    marginBottom: Spacing.xs,
+  },
+  galleryButtonLabel: {
+    color: Colors.textInverse,
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   captureButton: {
     width: 70,
@@ -461,40 +485,94 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray400,
     borderColor: Colors.gray600,
   },
-  photoPreviewWrapper: {
+  saveButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.success,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Sizes.radiusMedium,
+    minWidth: 70,
+  },
+  saveButtonText: {
+    fontSize: 24,
+    color: Colors.textInverse,
+    marginBottom: Spacing.xs,
+  },
+  saveButtonLabel: {
+    color: Colors.textInverse,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  photoPreviewContainer: {
     backgroundColor: Colors.gray800,
+    paddingBottom: Spacing.lg, // Extra padding to prevent cutoff
   },
   photoPreview: {
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.md,
+  },
+  photoPreviewContent: {
+    paddingHorizontal: Spacing.sm,
   },
   photoPreviewItem: {
-    marginLeft: Spacing.sm,
+    marginHorizontal: Spacing.sm,
     alignItems: 'center',
     position: 'relative',
   },
   photoPreviewImage: {
-    width: 60,
-    height: 60,
+    width: 70,
+    height: 70,
     borderRadius: Sizes.radiusSmall,
+    borderWidth: 2,
+    borderColor: Colors.gray600,
+  },
+  photoTypeBadgeContainer: {
+    position: 'absolute',
+    bottom: -8,
+    left: '50%',
+    transform: [{ translateX: -20 }], // Half of badge width
   },
   photoTypeBadge: {
-    position: 'absolute',
-    bottom: -Spacing.xs,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Sizes.radiusSmall,
+    borderWidth: 1,
+    borderColor: Colors.textInverse,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  photoTypeBadgeText: {
+    color: Colors.textInverse,
+    fontSize: 10,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   deletePhotoButton: {
     position: 'absolute',
-    top: -Spacing.xs,
-    right: -Spacing.xs,
+    top: -8,
+    right: -8,
     backgroundColor: Colors.error,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.textInverse,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
   },
   deletePhotoButtonText: {
-    ...Typography.caption,
     color: Colors.textInverse,
+    fontSize: 14,
     fontWeight: 'bold',
+    lineHeight: 14,
   },
 });

@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { getCurrentUser, supabase } from '../services/SupabaseHTTPClient';
 import { getTierDisplayName, getTierColor, getTierLimits } from '../utils/JobUtils';
-import { mvpStorageService } from '../services/MVPStorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Typography, Spacing, Sizes } from '../theme';
 import { Wrapper, Button, Badge, LoadingSpinner, KeyboardAvoidingWrapper } from '../components/ui';
@@ -22,16 +21,6 @@ interface UserProfile {
   subscription_tier: 'free' | 'starter' | 'professional' | 'business';
   jobs_count: number;
   created_at: string;
-  storage_used_bytes?: number;
-  last_photo_upload?: string;
-}
-
-interface UsageStats {
-  tier: string;
-  photosPerJobLimit: number | undefined;
-  upgradeNeeded: boolean;
-  dailyUploads?: number;
-  dailyLimit?: number;
 }
 
 interface ProfileScreenProps {
@@ -42,8 +31,6 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [localJobCount, setLocalJobCount] = useState(0);
-  const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
-  const [rateLimitStatus, setRateLimitStatus] = useState<any>(null);
 
   useEffect(() => {
     loadProfile();
@@ -87,14 +74,6 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
         setLocalJobCount(jobs.length);
       }
 
-      // MVP: Get usage stats
-      const stats = await mvpStorageService.getUsageStats(user.id);
-      setUsageStats(stats);
-
-      // Get rate limit status for debugging/display
-      const rateLimits = mvpStorageService.getRateLimitStatus(user.id, stats.tier);
-      setRateLimitStatus(rateLimits);
-
     } catch (error) {
       console.error('Error loading profile:', error);
       Alert.alert('Error', 'Failed to load profile');
@@ -128,30 +107,27 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
   };
 
   const handleUpgrade = () => {
+    const jobsUsed = Math.max(profile?.jobs_count || 0, localJobCount);
+    const isNearLimit = jobsUsed >= 15; // 75% of free limit
+    
     Alert.alert(
-      '🚀 Upgrade to Starter Plan',
-      'Unlock unlimited photos and grow your business!\n\n✅ Unlimited photos per job\n✅ 200 total jobs\n✅ 2GB cloud storage\n✅ PDF reports with your photos\n✅ Client signatures\n✅ 10 photos per minute (vs 5)\n✅ 1000 photos per day (vs 200)\n\nPerfect for growing service businesses.',
+      isNearLimit ? '🔥 Almost at Your Limit!' : '🚀 Upgrade to Pro',
+      isNearLimit 
+        ? `You've used ${jobsUsed}/20 free jobs. Upgrade now before you hit the limit!\n\n✅ Unlimited jobs forever\n✅ Professional branded PDFs\n✅ Client review portal\n✅ Priority support\n\nJust $19/month - less than one small job!`
+        : `Unlock unlimited potential for your business!\n\n✅ Unlimited jobs (vs 20)\n✅ Professional PDF branding\n✅ Client review portal\n✅ Advanced features\n✅ Priority support\n\nJust $19/month - pays for itself with one job!`,
       [
         { text: 'Maybe Later', style: 'cancel' },
         { 
-          text: 'Learn More', 
+          text: isNearLimit ? 'Upgrade Now!' : 'Learn More', 
           onPress: () => {
             Alert.alert(
               'Coming Soon!', 
-              'Stripe integration is being finalized. Contact support@proofly.com for early access to paid plans.\n\nEarly users get 50% off first 3 months!'
+              'Stripe integration is being finalized. Contact support@proofly.com for early access to Pro!\n\n🎉 Early users get 50% off first 3 months!'
             );
           }
         }
       ]
     );
-  };
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
   const formatDate = (dateString?: string) => {
@@ -188,6 +164,11 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
     );
   }
 
+  const jobsUsed = Math.max(profile.jobs_count, localJobCount);
+  const isFreeTier = profile.subscription_tier === 'free';
+  const isNearLimit = jobsUsed >= 15; // 75% of 20
+  const isAtLimit = jobsUsed >= 20;
+
   return (
     <KeyboardAvoidingWrapper>
       {/* Header */}
@@ -196,7 +177,7 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
         <Text style={styles.headerSubtitle}>Account & Settings</Text>
       </View>
 
-      {/* Profile Info */}
+      {/* Account Info */}
       <Wrapper variant="default" style={styles.section}>
         <Text style={styles.sectionTitle}>Account Information</Text>
         
@@ -219,164 +200,115 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
           </View>
         )}
 
-        {profile.phone && (
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Phone</Text>
-            <Text style={styles.infoValue}>{profile.phone}</Text>
-          </View>
-        )}
-
         <View style={styles.infoItem}>
           <Text style={styles.infoLabel}>Member Since</Text>
           <Text style={styles.infoValue}>
             {new Date(profile.created_at).toLocaleDateString()}
           </Text>
         </View>
-
-        <View style={styles.infoItem}>
-          <Text style={styles.infoLabel}>Last Photo Upload</Text>
-          <Text style={styles.infoValue}>
-            {formatDate(profile.last_photo_upload)}
-          </Text>
-        </View>
       </Wrapper>
 
-      {/* Subscription Info */}
-      <Wrapper variant="default" style={styles.section}>
-        <Text style={styles.sectionTitle}>Subscription</Text>
+      {/* Plan & Usage - The Money Maker Section */}
+      <Wrapper variant="elevated" style={[styles.section, styles.planSection]}>
+        <View style={styles.planHeader}>
+          <Text style={styles.sectionTitle}>Your Plan</Text>
+          <Badge 
+            variant={isFreeTier ? 'warning' : 'success'}
+            style={styles.tierBadge}
+          >
+            {getTierDisplayName(profile.subscription_tier)}
+          </Badge>
+        </View>
         
-        <View style={styles.subscriptionWrapper}>
-          <View style={styles.subscriptionHeader}>
-            <Badge 
-              variant={profile.subscription_tier === 'free' ? 'warning' : 'success'}
-              style={styles.tierBadge}
-            >
-              {getTierDisplayName(profile.subscription_tier)}
-            </Badge>
+        {/* Simple, Clean Usage Display */}
+        <View style={styles.usageDisplay}>
+          <View style={styles.usageMain}>
+            <Text style={styles.usageNumber}>{jobsUsed}</Text>
+            <Text style={styles.usageLabel}>
+              {isFreeTier ? `of 20 jobs used` : 'jobs created'}
+            </Text>
           </View>
           
-          <Text style={styles.tierLimits}>{getTierLimits(profile.subscription_tier)}</Text>
-          
-          <View style={styles.usageGrid}>
-            <View style={styles.usageInfo}>
-              <Text style={styles.usageLabel}>Jobs Created:</Text>
-              <Text style={styles.usageValue}>
-                {profile.jobs_count} {profile.subscription_tier === 'free' ? '/ 20' : ''}
+          {isFreeTier && (
+            <View style={styles.usageBar}>
+              <View style={styles.usageBarBackground}>
+                <View 
+                  style={[
+                    styles.usageBarFill, 
+                    { 
+                      width: `${Math.min((jobsUsed / 20) * 100, 100)}%`,
+                      backgroundColor: isAtLimit ? Colors.error : 
+                                     isNearLimit ? Colors.warning : Colors.primary
+                    }
+                  ]} 
+                />
+              </View>
+              <Text style={[
+                styles.usageBarText,
+                { color: isAtLimit ? Colors.error : 
+                         isNearLimit ? Colors.warning : Colors.textSecondary }
+              ]}>
+                {20 - jobsUsed} jobs remaining
               </Text>
             </View>
-
-            <View style={styles.usageInfo}>
-              <Text style={styles.usageLabel}>Local Jobs:</Text>
-              <Text style={styles.usageValue}>{localJobCount}</Text>
-            </View>
-
-            <View style={styles.usageInfo}>
-              <Text style={styles.usageLabel}>Storage Used:</Text>
-              <Text style={styles.usageValue}>
-                {formatBytes(profile.storage_used_bytes || 0)}
-              </Text>
-            </View>
-          </View>
-
-          {profile.subscription_tier === 'free' && (
-            <Button 
-              variant="success" 
-              onPress={handleUpgrade} 
-              style={styles.upgradeButton}
-            >
-              🚀 Upgrade Plan
-            </Button>
           )}
         </View>
+
+        {/* Upgrade CTA */}
+        {isFreeTier && (
+          <View style={styles.upgradeSection}>
+            {isAtLimit ? (
+              <View style={styles.limitReached}>
+                <Text style={styles.limitReachedTitle}>🚨 Limit Reached!</Text>
+                <Text style={styles.limitReachedText}>
+                  Upgrade to Pro to continue creating jobs
+                </Text>
+              </View>
+            ) : isNearLimit ? (
+              <View style={styles.nearLimit}>
+                <Text style={styles.nearLimitTitle}>⚠️ Almost Full!</Text>
+                <Text style={styles.nearLimitText}>
+                  Only {20 - jobsUsed} jobs left. Upgrade before you run out!
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.upgradePrompt}>
+                <Text style={styles.upgradePromptTitle}>💼 Growing Your Business?</Text>
+                <Text style={styles.upgradePromptText}>
+                  Upgrade to Pro for unlimited jobs and professional features
+                </Text>
+              </View>
+            )}
+            
+            <Button 
+              variant={isAtLimit ? "primary" : isNearLimit ? "primary" : "success"}
+              onPress={handleUpgrade}
+              style={styles.upgradeButton}
+            >
+              {isAtLimit ? '🔓 Upgrade Now - $19/mo' : 
+               isNearLimit ? '⬆️ Upgrade Before Limit' : 
+               '🚀 Upgrade to Pro'}
+            </Button>
+          </View>
+        )}
+
+        {/* Pro User Success Message */}
+        {!isFreeTier && (
+          <View style={styles.proUserSection}>
+            <Text style={styles.proUserTitle}>🎉 You're a Pro!</Text>
+            <Text style={styles.proUserText}>
+              Enjoy unlimited jobs and all premium features
+            </Text>
+          </View>
+        )}
       </Wrapper>
 
-      {/* MVP: Usage Limits & Rate Limiting */}
-      {usageStats && (
-        <Wrapper variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Usage Limits & Rate Limits</Text>
-          
-          <View style={styles.limitWrapper}>
-            <View style={styles.limitItem}>
-              <Text style={styles.limitLabel}>Photos Per Job:</Text>
-              <Text style={[
-                styles.limitValue, 
-                usageStats.photosPerJobLimit === undefined ? styles.unlimitedText : styles.limitedText
-              ]}>
-                {usageStats.photosPerJobLimit === undefined ? 'Unlimited ✨' : `${usageStats.photosPerJobLimit} max`}
-              </Text>
-            </View>
-
-            <View style={styles.limitItem}>
-              <Text style={styles.limitLabel}>Daily Photos:</Text>
-              <Text style={styles.limitValue}>
-                {usageStats.dailyUploads || 0} / {usageStats.dailyLimit === undefined ? '∞' : usageStats.dailyLimit}
-              </Text>
-            </View>
-
-            {rateLimitStatus && (
-              <View style={styles.rateLimitSection}>
-                <Text style={styles.rateLimitTitle}>Rate Limits (Abuse Protection)</Text>
-                
-                <View style={styles.rateLimitGrid}>
-                  <View style={styles.rateLimitItem}>
-                    <Text style={styles.rateLimitLabel}>Per Minute:</Text>
-                    <Text style={styles.rateLimitValue}>
-                      {rateLimitStatus.minute.used} / {rateLimitStatus.minute.limit || '∞'}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.rateLimitItem}>
-                    <Text style={styles.rateLimitLabel}>Per Hour:</Text>
-                    <Text style={styles.rateLimitValue}>
-                      {rateLimitStatus.hour.used} / {rateLimitStatus.hour.limit || '∞'}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.rateLimitItem}>
-                    <Text style={styles.rateLimitLabel}>Per Day:</Text>
-                    <Text style={styles.rateLimitValue}>
-                      {rateLimitStatus.day.used} / {rateLimitStatus.day.limit || '∞'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {usageStats.tier === 'free' && (
-              <View style={styles.limitWarning}>
-                <Text style={styles.limitWarningText}>
-                  📸 Free plan limits: 25 photos/job, 5/min, 200/day
-                </Text>
-                <Text style={styles.limitWarningSubtext}>
-                  Upgrade for unlimited photos and higher rate limits
-                </Text>
-              </View>
-            )}
-
-            {usageStats.upgradeNeeded && (
-              <Button 
-                variant="primary" 
-                onPress={handleUpgrade}
-                style={styles.upgradeButtonSecondary}
-              >
-                ⬆️ Get Unlimited Photos - $19/month
-              </Button>
-            )}
-          </View>
-        </Wrapper>
-      )}
-
-      {/* App Info */}
+      {/* Quick Actions */}
       <Wrapper variant="default" style={styles.section}>
-        <Text style={styles.sectionTitle}>App Information</Text>
+        <Text style={styles.sectionTitle}>Support & Legal</Text>
         
-        <View style={styles.infoItem}>
-          <Text style={styles.infoLabel}>Version</Text>
-          <Text style={styles.infoValue}>1.0.0</Text>
-        </View>
-
         <TouchableOpacity style={styles.actionButton}>
-          <Text style={styles.actionButtonText}>📞 Support</Text>
+          <Text style={styles.actionButtonText}>📞 Contact Support</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton}>
@@ -399,14 +331,12 @@ export default function ProfileScreen({ onSignOut }: ProfileScreenProps) {
         </Button>
       </Wrapper>
 
-      {/* Footer */}
+      {/* Simple Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>
           Proofly - Professional Service Documentation
         </Text>
-        <Text style={styles.footerSubtext}>
-          Protected by advanced rate limiting and abuse prevention
-        </Text>
+        <Text style={styles.footerVersion}>Version 1.0.0</Text>
       </View>
     </KeyboardAvoidingWrapper>
   );
@@ -479,127 +409,125 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontWeight: '600',
   },
-  subscriptionWrapper: {
+  
+  // Plan Section - The Money Maker
+  planSection: {
     backgroundColor: Colors.gray50,
-    padding: Spacing.md,
-    borderRadius: Sizes.radiusMedium,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
+    borderWidth: 2,
+    borderColor: Colors.primary + '20',
   },
-  subscriptionHeader: {
+  planHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   tierBadge: {
     // Badge component handles styling
   },
-  tierLimits: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.md,
-  },
-  usageGrid: {
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  usageInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  usageDisplay: {
     alignItems: 'center',
+    marginBottom: Spacing.xl,
+  },
+  usageMain: {
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  usageNumber: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    lineHeight: 56,
   },
   usageLabel: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-  },
-  usageValue: {
-    ...Typography.bodySmall,
-    color: Colors.textPrimary,
-    fontWeight: '600',
-  },
-  upgradeButton: {
-    marginTop: Spacing.md,
-  },
-  // MVP: Enhanced styles for rate limiting display
-  limitWrapper: {
-    backgroundColor: Colors.gray50,
-    padding: Spacing.md,
-    borderRadius: Sizes.radiusMedium,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-  },
-  limitItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  limitLabel: {
     ...Typography.body,
     color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  usageBar: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  usageBarBackground: {
+    width: '100%',
+    height: 8,
+    backgroundColor: Colors.gray200,
+    borderRadius: 4,
+    marginBottom: Spacing.sm,
+  },
+  usageBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  usageBarText: {
+    ...Typography.bodySmall,
     fontWeight: '500',
   },
-  limitValue: {
-    ...Typography.body,
-    fontWeight: '600',
-  },
-  unlimitedText: {
-    color: Colors.success,
-  },
-  limitedText: {
-    color: Colors.warning,
-  },
-  rateLimitSection: {
-    marginTop: Spacing.md,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
-  },
-  rateLimitTitle: {
-    ...Typography.label,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.md,
-  },
-  rateLimitGrid: {
-    gap: Spacing.sm,
-  },
-  rateLimitItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  
+  // Upgrade CTAs
+  upgradeSection: {
     alignItems: 'center',
   },
-  rateLimitLabel: {
-    ...Typography.bodySmall,
+  limitReached: {
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  limitReachedTitle: {
+    ...Typography.h4,
+    color: Colors.error,
+    marginBottom: Spacing.sm,
+  },
+  limitReachedText: {
+    ...Typography.body,
+    color: Colors.error,
+    textAlign: 'center',
+  },
+  nearLimit: {
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  nearLimitTitle: {
+    ...Typography.h4,
+    color: Colors.warning,
+    marginBottom: Spacing.sm,
+  },
+  nearLimitText: {
+    ...Typography.body,
+    color: Colors.warning,
+    textAlign: 'center',
+  },
+  upgradePrompt: {
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  upgradePromptTitle: {
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+  },
+  upgradePromptText: {
+    ...Typography.body,
     color: Colors.textSecondary,
+    textAlign: 'center',
   },
-  rateLimitValue: {
-    ...Typography.bodySmall,
-    color: Colors.primary,
-    fontWeight: '600',
+  upgradeButton: {
+    minWidth: 200,
   },
-  limitWarning: {
-    backgroundColor: Colors.warning + '15',
-    padding: Spacing.md,
-    borderRadius: Sizes.radiusSmall,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.warning + '30',
+  proUserSection: {
+    alignItems: 'center',
   },
-  limitWarningText: {
-    ...Typography.bodySmall,
-    color: Colors.warning,
-    fontWeight: '600',
-    marginBottom: Spacing.xs,
+  proUserTitle: {
+    ...Typography.h4,
+    color: Colors.success,
+    marginBottom: Spacing.sm,
   },
-  limitWarningSubtext: {
-    ...Typography.caption,
-    color: Colors.warning,
+  proUserText: {
+    ...Typography.body,
+    color: Colors.success,
+    textAlign: 'center',
   },
-  upgradeButtonSecondary: {
-    // Button component handles styling
-  },
+  
+  // Simple sections
   actionButton: {
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
@@ -623,7 +551,7 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     textAlign: 'center',
   },
-  footerSubtext: {
+  footerVersion: {
     ...Typography.caption,
     color: Colors.gray400,
     textAlign: 'center',

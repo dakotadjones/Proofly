@@ -1,11 +1,11 @@
 // src/services/CloudSyncService.ts
-// Fixed with automatic ID migration before sync
+// Fixed with status validation and proper constraint handling
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, getCurrentUser } from './SupabaseHTTPClient';
 import { Job } from '../screens/HomeScreen';
 import { JobPhoto } from '../screens/CameraScreen';
-import { TIER_LIMITS, generateUUID, isValidUUID } from '../utils/JobUtils';
+import { TIER_LIMITS, generateUUID, isValidUUID, calculateJobStatus } from '../utils/JobUtils';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import { Alert } from 'react-native';
@@ -24,6 +24,10 @@ interface PhotoUploadResult {
   originalSize?: number;
   compressedSize?: number;
 }
+
+// Valid status values that match database constraints
+const VALID_JOB_STATUSES = ['created', 'in_progress', 'pending_remote_signature', 'completed'] as const;
+type ValidJobStatus = typeof VALID_JOB_STATUSES[number];
 
 class CloudSyncService {
   private syncInProgress = false;
@@ -53,6 +57,30 @@ class CloudSyncService {
     } catch (error) {
       console.error('Error saving last sync time:', error);
     }
+  }
+
+  // CRITICAL: Validate and normalize job status before sync
+  private validateAndNormalizeJobStatus(job: Job): ValidJobStatus {
+    const currentStatus = job.status;
+    
+    // Check if current status is already valid
+    if (VALID_JOB_STATUSES.includes(currentStatus as ValidJobStatus)) {
+      return currentStatus as ValidJobStatus;
+    }
+    
+    // Fallback: calculate the correct status based on job data
+    const calculatedStatus = calculateJobStatus(job);
+    
+    console.log(`⚠️ Invalid status "${currentStatus}" for job ${job.id}, using calculated status: ${calculatedStatus}`);
+    
+    // Ensure the calculated status is valid
+    if (VALID_JOB_STATUSES.includes(calculatedStatus as ValidJobStatus)) {
+      return calculatedStatus as ValidJobStatus;
+    }
+    
+    // Ultimate fallback
+    console.error(`❌ Calculated status "${calculatedStatus}" is also invalid, defaulting to 'created'`);
+    return 'created';
   }
 
   // CRITICAL: Migrate job and photo IDs before syncing (only for old timestamp IDs)
@@ -87,10 +115,18 @@ class CloudSyncService {
       }
     }
 
-    // If we migrated IDs, save back to local storage immediately
+    // CRITICAL: Validate and fix status before sync
+    const validStatus = this.validateAndNormalizeJobStatus(migratedJob);
+    if (migratedJob.status !== validStatus) {
+      console.log(`🔄 Normalizing job status from "${migratedJob.status}" to "${validStatus}"`);
+      migratedJob.status = validStatus;
+      needsUpdate = true;
+    }
+
+    // If we migrated IDs or status, save back to local storage immediately
     if (needsUpdate) {
       this.updateLocalJob(migratedJob).catch(error => {
-        console.error('Failed to update local job after ID migration:', error);
+        console.error('Failed to update local job after migration:', error);
       });
     }
 
@@ -369,28 +405,34 @@ class CloudSyncService {
     }
   }
 
-  // Convert Job object to database format
+  // Convert Job object to database format with proper status validation
   private jobToDbFormat(job: Job, userId: string) {
-    return {
+    // Ensure we have a valid status
+    const validStatus = this.validateAndNormalizeJobStatus(job);
+    
+    const dbJob = {
       id: job.id,
       user_id: userId,
       client_name: job.clientName,
-      client_email: job.clientEmail,
+      client_email: job.clientEmail || null,
       client_phone: job.clientPhone,
       service_type: job.serviceType,
-      description: job.description,
+      description: job.description || null,
       address: job.address,
-      status: job.status,
+      status: validStatus, // Use validated status
       created_at: job.createdAt,
       updated_at: new Date().toISOString(),
-      completed_at: job.completedAt,
-      signature_data: job.signature,
-      client_signed_name: job.clientSignedName,
-      job_satisfaction: job.jobSatisfaction
+      completed_at: job.completedAt || null,
+      signature_data: job.signature || null,
+      client_signed_name: job.clientSignedName || null,
+      job_satisfaction: job.jobSatisfaction || null
     };
+
+    console.log(`📝 Job ${job.id} formatted for DB with status: ${validStatus}`);
+    return dbJob;
   }
 
-  // Sync single job to cloud using HTTP client with ID migration
+  // Sync single job to cloud using HTTP client with ID migration and status validation
   async syncJob(job: Job): Promise<SyncResult> {
     try {
       const user = await getCurrentUser();
@@ -398,23 +440,23 @@ class CloudSyncService {
         return { success: false, error: 'Not authenticated' };
       }
 
-      // CRITICAL: Migrate IDs before syncing
+      // CRITICAL: Migrate IDs and validate status before syncing
       const migratedJob = this.migrateJobForSync(job);
-      console.log(`🔄 Syncing job ${migratedJob.id} (was: ${job.id})`);
+      console.log(`🔄 Syncing job ${migratedJob.id} (was: ${job.id}) with status: ${migratedJob.status}`);
 
       // Check if job already exists in cloud
       const jobExists = await this.jobExistsInCloud(migratedJob.id, user.id);
 
-      // Upload job data via HTTP
+      // Upload job data via HTTP with validated status
       const jobData = this.jobToDbFormat(migratedJob, user.id);
       
       if (jobExists) {
         // Update existing job
         const updateResult = await supabase.update('jobs', jobData, { id: migratedJob.id });
         if (updateResult.error) {
-          throw new Error(updateResult.error);
+          throw new Error(`Update failed: ${updateResult.error}`);
         }
-        console.log(`Job ${migratedJob.id} updated in cloud`);
+        console.log(`✅ Job ${migratedJob.id} updated in cloud`);
       } else {
         // Insert new job
         const jobResult = await supabase.insert('jobs', jobData);
@@ -423,14 +465,14 @@ class CloudSyncService {
           if (jobResult.error.includes('duplicate') || jobResult.error.includes('already exists')) {
             const updateResult = await supabase.update('jobs', jobData, { id: migratedJob.id });
             if (updateResult.error) {
-              throw new Error(updateResult.error);
+              throw new Error(`Update after duplicate failed: ${updateResult.error}`);
             }
-            console.log(`Job ${migratedJob.id} updated in cloud (was duplicate)`);
+            console.log(`✅ Job ${migratedJob.id} updated in cloud (was duplicate)`);
           } else {
-            throw new Error(jobResult.error);
+            throw new Error(`Insert failed: ${jobResult.error}`);
           }
         } else {
-          console.log(`Job ${migratedJob.id} created in cloud`);
+          console.log(`✅ Job ${migratedJob.id} created in cloud`);
         }
       }
 
@@ -456,7 +498,7 @@ class CloudSyncService {
         }
       }
 
-      console.log(`Job ${migratedJob.id} synced: ${photosSynced} photos uploaded, ${photosFailed} failed`);
+      console.log(`✅ Job ${migratedJob.id} synced: ${photosSynced} photos uploaded, ${photosFailed} failed`);
 
       return {
         success: true,
@@ -464,7 +506,7 @@ class CloudSyncService {
         failed: photosFailed > 0 ? 1 : 0
       };
     } catch (error) {
-      console.error('Error syncing job:', error);
+      console.error('❌ Error syncing job:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Sync failed'
@@ -472,7 +514,7 @@ class CloudSyncService {
     }
   }
 
-  // Sync all local jobs to cloud using HTTP client
+  // Rest of the methods remain the same...
   async syncAllJobs(): Promise<SyncResult> {
     if (this.syncInProgress) {
       return { success: false, error: 'Sync already in progress' };
@@ -495,7 +537,7 @@ class CloudSyncService {
       }
 
       const localJobs: Job[] = JSON.parse(localJobsData);
-      console.log(`Starting sync of ${localJobs.length} jobs...`);
+      console.log(`🚀 Starting sync of ${localJobs.length} jobs...`);
 
       // Sync each job
       for (const job of localJobs) {
@@ -504,7 +546,7 @@ class CloudSyncService {
           totalSynced += result.synced || 0;
         } else {
           totalFailed++;
-          console.error(`Failed to sync job ${job.id}:`, result.error);
+          console.error(`❌ Failed to sync job ${job.id}:`, result.error);
         }
 
         // Small delay to avoid overwhelming the API
@@ -523,13 +565,15 @@ class CloudSyncService {
 
       await this.updateLastSyncTime();
 
+      console.log(`✅ Sync completed: ${totalSynced} synced, ${totalFailed} failed`);
+
       return {
         success: true,
         synced: totalSynced,
         failed: totalFailed
       };
     } catch (error) {
-      console.error('Error in syncAllJobs:', error);
+      console.error('❌ Error in syncAllJobs:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Sync failed'
@@ -564,7 +608,7 @@ class CloudSyncService {
         
         const photos = photosResult.data || [];
 
-        // Convert to local format
+        // Convert to local format with status validation
         const localJob: Job = {
           id: cloudJob.id,
           clientName: cloudJob.client_name,
@@ -573,7 +617,7 @@ class CloudSyncService {
           serviceType: cloudJob.service_type,
           description: cloudJob.description,
           address: cloudJob.address,
-          status: cloudJob.status,
+          status: this.validateAndNormalizeJobStatus({ status: cloudJob.status } as Job),
           createdAt: cloudJob.created_at,
           photos: photos.map((photo: any) => ({
             id: photo.id,
@@ -593,7 +637,7 @@ class CloudSyncService {
       // Save to local storage
       await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobsWithPhotos));
 
-      console.log(`Downloaded ${jobsWithPhotos.length} jobs from cloud`);
+      console.log(`📥 Downloaded ${jobsWithPhotos.length} jobs from cloud`);
 
       return {
         success: true,
@@ -601,7 +645,7 @@ class CloudSyncService {
         failed: 0
       };
     } catch (error) {
-      console.error('Error downloading jobs:', error);
+      console.error('❌ Error downloading jobs:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Download failed'
@@ -668,14 +712,14 @@ class CloudSyncService {
         // Fire and forget - don't block the UI
         this.syncJob(job).then(result => {
           if (result.success) {
-            console.log(`Job ${job.id} auto-synced to cloud`);
+            console.log(`✅ Job ${job.id} auto-synced to cloud`);
           } else {
-            console.log(`Auto-sync failed for job ${job.id}:`, result.error);
+            console.log(`❌ Auto-sync failed for job ${job.id}:`, result.error);
           }
         });
       }
     } catch (error) {
-      console.log('Auto-sync error:', error);
+      console.log('❌ Auto-sync error:', error);
     }
   }
 }

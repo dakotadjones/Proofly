@@ -10,15 +10,59 @@ interface JobStatusBadgeProps {
   showIcon?: boolean;
   size?: 'small' | 'medium';
   style?: ViewStyle;
+  onDarkBackground?: boolean; // New prop for header usage
 }
 
 export const JobStatusBadge: React.FC<JobStatusBadgeProps> = ({
   status,
-  showIcon = true,
+  showIcon = false, // Changed default to false - cleaner look
   size = 'medium',
   style,
+  onDarkBackground = false, // New prop
 }) => {
-  const getStatusStyle = (status: JobStatus) => {
+  const getStatusStyle = (status: JobStatus, onDarkBackground: boolean = false) => {
+    if (onDarkBackground) {
+      // High contrast styles for dark/colored backgrounds (like blue header)
+      switch (status) {
+        case 'created':
+          return {
+            backgroundColor: '#FFA500', // Solid orange background
+            borderColor: '#FFA500',
+            color: '#FFFFFF',          // White text for max contrast
+            icon: '○',
+          };
+        case 'in_progress':
+          return {
+            backgroundColor: '#4A90E2', // Lighter blue background
+            borderColor: '#4A90E2',
+            color: '#FFFFFF',          // White text
+            icon: '▶',
+          };
+        case 'pending_remote_signature':
+          return {
+            backgroundColor: '#FF6B35', // Vibrant orange background
+            borderColor: '#FF6B35',
+            color: '#FFFFFF',          // White text for maximum readability
+            icon: '⏳',
+          };
+        case 'completed':
+          return {
+            backgroundColor: '#28A745', // Solid green background
+            borderColor: '#28A745',
+            color: '#FFFFFF',          // White text
+            icon: '✓',
+          };
+        default:
+          return {
+            backgroundColor: '#6C757D', // Solid gray
+            borderColor: '#6C757D',
+            color: '#FFFFFF',
+            icon: '○',
+          };
+      }
+    }
+
+    // Original light background styles
     switch (status) {
       case 'created':
         return {
@@ -36,9 +80,9 @@ export const JobStatusBadge: React.FC<JobStatusBadgeProps> = ({
         };
       case 'pending_remote_signature':
         return {
-          backgroundColor: Colors.signed + '15',
-          borderColor: Colors.signed + '30',
-          color: Colors.signed,
+          backgroundColor: '#FF8C00' + '15',
+          borderColor: '#FF8C00' + '40',
+          color: '#CC6600',
           icon: '⏳',
         };
       case 'completed':
@@ -65,7 +109,7 @@ export const JobStatusBadge: React.FC<JobStatusBadgeProps> = ({
       case 'in_progress':
         return 'In Progress';
       case 'pending_remote_signature':
-        return 'Awaiting Approval';
+        return 'Awaiting Approval'; // Clean text, no emoji
       case 'completed':
         return 'Completed';
       default:
@@ -73,12 +117,12 @@ export const JobStatusBadge: React.FC<JobStatusBadgeProps> = ({
     }
   };
 
-  const statusStyle = getStatusStyle(status);
+  const statusStyle = getStatusStyle(status, onDarkBackground);
   const badgeHeight = size === 'small' ? 24 : 32;
   const iconSize = size === 'small' ? 12 : 16;
   const fontSize = size === 'small' ? 10 : Typography.badge.fontSize;
 
-  const WrapperStyle: ViewStyle = {
+  const containerStyle: ViewStyle = {
     flexDirection: 'row',
     alignItems: 'center',
     height: badgeHeight,
@@ -107,7 +151,7 @@ export const JobStatusBadge: React.FC<JobStatusBadgeProps> = ({
   };
 
   return (
-    <View style={WrapperStyle}>
+    <View style={containerStyle}>
       {showIcon && (
         <Text style={iconStyle}>
           {statusStyle.icon}
