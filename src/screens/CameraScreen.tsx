@@ -1,3 +1,4 @@
+// src/screens/CameraScreen.tsx - Updated with photo limit enforcement
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -13,7 +14,7 @@ import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import * as ImagePicker from 'expo-image-picker';
 import { generateUUID } from '../utils/JobUtils';
-import { mvpStorageService } from '../services/MVPStorageService';
+import { checkCanAddPhoto, showLimitAlert, getUserUsageStats } from '../services/JobLimitService';
 import { Colors, Typography, Spacing, Sizes } from '../theme';
 import { Button, Badge } from '../components/ui';
 
@@ -32,6 +33,7 @@ interface CameraScreenProps {
   onPhotosComplete?: (photos: JobPhoto[]) => void;
   initialPhotos?: JobPhoto[];
   onPhotosChange?: (photos: JobPhoto[]) => void;
+  onUpgrade?: () => void;
 }
 
 export default function CameraScreen({ 
@@ -39,50 +41,74 @@ export default function CameraScreen({
   clientName = 'Test Client',
   onPhotosComplete,
   initialPhotos = [],
-  onPhotosChange
+  onPhotosChange,
+  onUpgrade
 }: CameraScreenProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraType, setCameraType] = useState<CameraType>('back');
   const [photos, setPhotos] = useState<JobPhoto[]>(initialPhotos);
   const [activePhotoType, setActivePhotoType] = useState<'before' | 'during' | 'after'>('before');
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [usageStats, setUsageStats] = useState<any>(null);
+  const [photoLimitWarning, setPhotoLimitWarning] = useState<string>('');
   const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => {
     (async () => {
       const mediaLibraryStatus = await MediaLibrary.requestPermissionsAsync();
+      await loadUsageStats();
     })();
   }, []);
 
-  // MVP: Check photo limits before taking picture
-  const checkPhotoLimit = async () => {
-    const limitCheck = await mvpStorageService.canAddPhoto(photos.length);
-    if (!limitCheck.allowed) {
+  useEffect(() => {
+    // Check photo limits whenever photos change
+    checkPhotoLimits();
+  }, [photos.length]);
+
+  const loadUsageStats = async () => {
+    try {
+      const stats = await getUserUsageStats();
+      setUsageStats(stats);
+    } catch (error) {
+      console.error('Error loading usage stats:', error);
+    }
+  };
+
+  const checkPhotoLimits = async () => {
+    try {
+      const limitCheck = await checkCanAddPhoto(photos.length);
+      
+      if (!limitCheck.allowed) {
+        setPhotoLimitWarning(`📸 Limit reached: ${limitCheck.currentCount}/${limitCheck.limit} photos per job`);
+      } else if (limitCheck.upgradePrompt) {
+        if (limitCheck.upgradePrompt.urgency === 'high') {
+          setPhotoLimitWarning(`⚠️ Almost full: ${limitCheck.currentCount}/${limitCheck.limit} photos`);
+        } else {
+          setPhotoLimitWarning('');
+        }
+      } else {
+        setPhotoLimitWarning('');
+      }
+    } catch (error) {
+      console.error('Error checking photo limits:', error);
+    }
+  };
+
+  const handleUpgrade = () => {
+    if (onUpgrade) {
+      onUpgrade();
+    } else {
       Alert.alert(
-        'Photo Limit Reached',
-        limitCheck.reason,
+        'Upgrade to Pro', 
+        'Get unlimited photos per job, professional PDFs, and more!\n\nJust $19/month - less than one small job.',
         [
-          { text: 'OK', style: 'cancel' },
-          { 
-            text: 'Upgrade Plan', 
-            onPress: () => {
-              Alert.alert(
-                'Upgrade to Starter Plan', 
-                'Get unlimited photos, 200 jobs, and 2GB storage for just $19/month!\n\nPerfect for growing service businesses.',
-                [
-                  { text: 'Maybe Later', style: 'cancel' },
-                  { text: 'Learn More', onPress: () => {
-                    Alert.alert('Coming Soon!', 'Upgrade flow will be available soon. Contact support for early access.');
-                  }}
-                ]
-              );
-            }
-          }
+          { text: 'Maybe Later', style: 'cancel' },
+          { text: 'Learn More', onPress: () => {
+            Alert.alert('Coming Soon!', 'Upgrade flow will be available soon. Contact support for early access.');
+          }}
         ]
       );
-      return false;
     }
-    return true;
   };
 
   const takePicture = async () => {
@@ -91,10 +117,39 @@ export default function CameraScreen({
       return;
     }
 
-    // MVP: Check photo limits before taking picture
-    const canAdd = await checkPhotoLimit();
-    if (!canAdd) return;
+    // CRITICAL: Check photo limits before taking picture
+    try {
+      const limitCheck = await checkCanAddPhoto(photos.length);
+      
+      if (!limitCheck.allowed) {
+        // Show blocking alert
+        showLimitAlert(limitCheck, handleUpgrade);
+        return;
+      }
 
+      // If near limit, show warning but allow photo
+      if (limitCheck.upgradePrompt && limitCheck.upgradePrompt.urgency === 'high') {
+        Alert.alert(
+          limitCheck.upgradePrompt.title,
+          limitCheck.upgradePrompt.message + '\n\nContinue taking this photo?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: handleUpgrade },
+            { text: 'Take Photo', onPress: () => proceedWithPhoto() }
+          ]
+        );
+        return;
+      }
+
+      await proceedWithPhoto();
+    } catch (error) {
+      console.error('Error checking photo limits:', error);
+      // Continue anyway - don't block users due to service errors
+      await proceedWithPhoto();
+    }
+  };
+
+  const proceedWithPhoto = async () => {
     if (cameraRef.current) {
       try {
         const photo = await cameraRef.current.takePictureAsync({
@@ -127,10 +182,37 @@ export default function CameraScreen({
   };
 
   const pickImage = async () => {
-    // MVP: Check photo limits before picking image too
-    const canAdd = await checkPhotoLimit();
-    if (!canAdd) return;
+    // CRITICAL: Check photo limits before picking image too
+    try {
+      const limitCheck = await checkCanAddPhoto(photos.length);
+      
+      if (!limitCheck.allowed) {
+        showLimitAlert(limitCheck, handleUpgrade);
+        return;
+      }
 
+      // If near limit, show warning but allow selection
+      if (limitCheck.upgradePrompt && limitCheck.upgradePrompt.urgency === 'high') {
+        Alert.alert(
+          limitCheck.upgradePrompt.title,
+          limitCheck.upgradePrompt.message + '\n\nContinue selecting this photo?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: handleUpgrade },
+            { text: 'Select Photo', onPress: () => proceedWithImagePicker() }
+          ]
+        );
+        return;
+      }
+
+      await proceedWithImagePicker();
+    } catch (error) {
+      console.error('Error checking photo limits:', error);
+      await proceedWithImagePicker();
+    }
+  };
+
+  const proceedWithImagePicker = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -147,7 +229,13 @@ export default function CameraScreen({
           timestamp: new Date().toISOString(),
         };
 
-        setPhotos(prev => [...prev, newPhoto]);
+        setPhotos(prev => {
+          const newPhotos = [...prev, newPhoto];
+          if (onPhotosChange) {
+            onPhotosChange(newPhotos);
+          }
+          return newPhotos;
+        });
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image');
@@ -216,11 +304,35 @@ export default function CameraScreen({
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Header with usage info */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Job Photos</Text>
-        <Text style={styles.headerSubtitle}>{clientName}</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Job Photos</Text>
+          <Text style={styles.headerSubtitle}>{clientName}</Text>
+        </View>
+        {usageStats && (
+          <View style={styles.usageInfo}>
+            <Badge 
+              variant={photoLimitWarning ? 'warning' : 'primary'}
+              size="small"
+            >
+              {usageStats.tierInfo.name} Plan
+            </Badge>
+          </View>
+        )}
       </View>
+
+      {/* Photo Limit Warning */}
+      {photoLimitWarning && (
+        <View style={styles.limitWarningContainer}>
+          <View style={styles.limitWarning}>
+            <Text style={styles.limitWarningText}>{photoLimitWarning}</Text>
+            <TouchableOpacity onPress={handleUpgrade} style={styles.upgradeLink}>
+              <Text style={styles.upgradeLinkText}>Upgrade</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Photo Type Selector */}
       <View style={styles.photoTypeSelector}>
@@ -263,6 +375,12 @@ export default function CameraScreen({
           >
             <Text style={styles.flipButtonText}>Flip</Text>
           </TouchableOpacity>
+
+          {/* Photo count indicator */}
+          <View style={styles.photoCountIndicator}>
+            <Text style={styles.photoCountText}>{photos.length}</Text>
+            <Text style={styles.photoCountLabel}>photos</Text>
+          </View>
         </View>
       </View>
 
@@ -365,6 +483,12 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.statusBarOffset + Spacing.md,
     paddingBottom: Spacing.md,
     paddingHorizontal: Spacing.screenPadding,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  headerContent: {
+    flex: 1,
   },
   headerTitle: {
     ...Typography.h2,
@@ -375,6 +499,36 @@ const styles = StyleSheet.create({
     color: Colors.textInverse,
     opacity: 0.8,
     marginTop: Spacing.xs,
+  },
+  usageInfo: {
+    // Badge component handles styling
+  },
+  limitWarningContainer: {
+    backgroundColor: Colors.warning + '20',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.screenPadding,
+  },
+  limitWarning: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  limitWarningText: {
+    ...Typography.bodySmall,
+    color: Colors.warning,
+    fontWeight: '600',
+    flex: 1,
+  },
+  upgradeLink: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    backgroundColor: Colors.warning,
+    borderRadius: Sizes.radiusSmall,
+  },
+  upgradeLinkText: {
+    ...Typography.caption,
+    color: Colors.textInverse,
+    fontWeight: 'bold',
   },
   photoTypeSelector: {
     flexDirection: 'row',
@@ -419,7 +573,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'transparent',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     alignItems: 'flex-end',
     padding: Spacing.lg,
   },
@@ -433,6 +587,23 @@ const styles = StyleSheet.create({
     color: Colors.textInverse,
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  photoCountIndicator: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Sizes.radiusMedium,
+    alignItems: 'center',
+  },
+  photoCountText: {
+    color: Colors.textInverse,
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  photoCountLabel: {
+    color: Colors.textInverse,
+    fontSize: 12,
+    opacity: 0.8,
   },
   controls: {
     flexDirection: 'row',
@@ -506,7 +677,7 @@ const styles = StyleSheet.create({
   },
   photoPreviewContainer: {
     backgroundColor: Colors.gray800,
-    paddingBottom: Spacing.lg, // Extra padding to prevent cutoff
+    paddingBottom: Spacing.lg,
   },
   photoPreview: {
     paddingVertical: Spacing.md,
@@ -530,7 +701,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -8,
     left: '50%',
-    transform: [{ translateX: -20 }], // Half of badge width
+    transform: [{ translateX: -20 }],
   },
   photoTypeBadge: {
     backgroundColor: Colors.primary,

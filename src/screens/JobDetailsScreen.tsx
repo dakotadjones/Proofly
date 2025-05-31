@@ -1,3 +1,4 @@
+// src/screens/JobDetailsScreen.tsx - Updated with limit enforcement
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -12,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Job } from './HomeScreen';
 import { useFocusEffect } from '@react-navigation/native';
 import { calculateJobStatus, getStatusColor, getStatusText, getStatusDescription, getRemoteSigningStatus, isRemoteSigningExpired } from '../utils/JobUtils';
+import { checkCanAddPhoto, showLimitAlert, getUserUsageStats } from '../services/JobLimitService';
 import { Colors, Typography, Spacing, Sizes } from '../theme';
 import { Wrapper, Button, JobStatusBadge, Badge } from '../components/ui';
 
@@ -21,7 +23,8 @@ interface JobDetailsScreenProps {
   onTakePhotos: (job: Job) => void;
   onGetSignature: (job: Job) => void;
   onGeneratePDF: (job: Job) => void;
-  onJobUpdate?: (job: Job) => void; // Optional callback for updates
+  onJobUpdate?: (job: Job) => void;
+  onUpgrade?: () => void; // Add upgrade callback
 }
 
 export default function JobDetailsScreen({
@@ -31,8 +34,10 @@ export default function JobDetailsScreen({
   onGetSignature,
   onGeneratePDF,
   onJobUpdate,
+  onUpgrade,
 }: JobDetailsScreenProps) {
   const [job, setJob] = useState<Job>(initialJob);
+  const [usageStats, setUsageStats] = useState<any>(null);
 
   // Refresh job data when screen comes into focus
   useFocusEffect(
@@ -91,8 +96,69 @@ export default function JobDetailsScreen({
       };
 
       loadJobFromStorage();
-    }, [job.id]) // Only depend on job.id, not the whole job object
+      loadUsageStats();
+    }, [job.id])
   );
+
+  const loadUsageStats = async () => {
+    try {
+      const stats = await getUserUsageStats();
+      setUsageStats(stats);
+    } catch (error) {
+      console.error('Error loading usage stats:', error);
+    }
+  };
+
+  const handleUpgrade = () => {
+    if (onUpgrade) {
+      onUpgrade();
+    } else {
+      Alert.alert(
+        'Upgrade to Pro', 
+        'Get unlimited photos, professional PDFs, and more!\n\nJust $19/month - pays for itself with one job.',
+        [
+          { text: 'Maybe Later', style: 'cancel' },
+          { text: 'Learn More', onPress: () => {
+            Alert.alert('Coming Soon!', 'Upgrade flow will be available soon. Contact support for early access.');
+          }}
+        ]
+      );
+    }
+  };
+
+  // CRITICAL: Check photo limits before opening camera
+  const handleTakePhotos = async () => {
+    try {
+      const limitCheck = await checkCanAddPhoto(job.photos.length);
+      
+      if (!limitCheck.allowed) {
+        // Show blocking alert
+        showLimitAlert(limitCheck, handleUpgrade);
+        return;
+      }
+
+      // If near limit, show warning but allow camera
+      if (limitCheck.upgradePrompt && limitCheck.upgradePrompt.urgency !== 'low') {
+        Alert.alert(
+          limitCheck.upgradePrompt.title,
+          limitCheck.upgradePrompt.message + '\n\nContinue to camera?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: handleUpgrade },
+            { text: 'Take Photos', onPress: () => onTakePhotos(job) }
+          ]
+        );
+        return;
+      }
+
+      // All good, proceed to camera
+      onTakePhotos(job);
+    } catch (error) {
+      console.error('Error checking photo limits:', error);
+      // Continue anyway - don't block users due to service errors
+      onTakePhotos(job);
+    }
+  };
 
   const getNextStep = () => {
     if (job.signature) {
@@ -121,12 +187,60 @@ export default function JobDetailsScreen({
     return job.photos.length > 0;
   };
 
+  const getPhotoLimitInfo = () => {
+    if (!usageStats) return null;
+    
+    const { tierInfo } = usageStats;
+    
+    if (tierInfo.photosPerJob === null) {
+      return null; // Pro user, no limits
+    }
+    
+    const remaining = tierInfo.photosPerJob - job.photos.length;
+    const isNearLimit = remaining <= 5;
+    const isAtLimit = remaining <= 0;
+    
+    if (isAtLimit) {
+      return {
+        text: `📸 Photo limit reached (${job.photos.length}/${tierInfo.photosPerJob})`,
+        variant: 'error' as const,
+        showUpgrade: true
+      };
+    }
+    
+    if (isNearLimit) {
+      return {
+        text: `📷 ${remaining} photos remaining`,
+        variant: 'warning' as const,
+        showUpgrade: true
+      };
+    }
+    
+    return null;
+  };
+
   const showPhotosPreview = () => {
     if (job.photos.length === 0) return null;
 
+    const photoLimitInfo = getPhotoLimitInfo();
+
     return (
       <View style={styles.photosPreview}>
-        <Text style={styles.previewTitle}>Photos ({job.photos.length})</Text>
+        <View style={styles.previewHeader}>
+          <Text style={styles.previewTitle}>Photos ({job.photos.length})</Text>
+          {photoLimitInfo && (
+            <View style={styles.limitInfoContainer}>
+              <Badge variant={photoLimitInfo.variant} size="small">
+                {photoLimitInfo.text}
+              </Badge>
+              {photoLimitInfo.showUpgrade && (
+                <TouchableOpacity onPress={handleUpgrade} style={styles.miniUpgradeButton}>
+                  <Text style={styles.miniUpgradeText}>Upgrade</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
           {job.photos.map((photo) => (
             <View key={photo.id} style={styles.photoItem}>
@@ -142,22 +256,24 @@ export default function JobDetailsScreen({
   };
 
   return (
-    <ScrollView style={styles.Wrapper}>
+    <ScrollView style={styles.container}>
       {/* Header */}
-<View style={styles.header}>
-  <View style={styles.headerContent}>
-    <Text style={styles.headerTitle}>{job.clientName}</Text>
-    <Text style={styles.headerSubtitle}>{job.serviceType}</Text>
-  </View>
-  <JobStatusBadge 
-    status={job.status} 
-    size="medium" 
-    onDarkBackground={true}  // This is the key change!
-  />
-</View>
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>{job.clientName}</Text>
+          <Text style={styles.headerSubtitle}>{job.serviceType}</Text>
+        </View>
+        <View style={styles.headerRight}>
+          <JobStatusBadge 
+            status={job.status} 
+            size="medium" 
+            onDarkBackground={true}
+          />
+        </View>
+      </View>
 
       {/* Status Overview */}
-      <Wrapper variant="elevated" style={styles.statusWrapper}>
+      <Wrapper variant="elevated" style={styles.statusContainer}>
         <Text style={styles.statusTitle}>Job Status</Text>
         <Text style={styles.statusDescription}>{getStatusDescription(job)}</Text>
         <Text style={styles.nextStep}>{getNextStep()}</Text>
@@ -219,7 +335,7 @@ export default function JobDetailsScreen({
         <Wrapper variant="default" style={styles.section}>
           <Text style={styles.sectionTitle}>📱 Remote Approval Status</Text>
           
-          <View style={styles.remoteStatusWrapper}>
+          <View style={styles.remoteStatusContainer}>
             <View style={styles.remoteStatusHeader}>
               <Text style={styles.remoteStatusTitle}>
                 {job.signature ? '✅ Approved' : '⏳ Waiting for Client'}
@@ -320,12 +436,12 @@ export default function JobDetailsScreen({
         </Wrapper>
       )}
 
-      {/* Action Wrappers */}
-      <View style={styles.actionsWrapper}>
+      {/* Action Cards */}
+      <View style={styles.actionsContainer}>
         
-        {/* Photos Wrapper */}
-        <Wrapper variant="default" style={styles.actionWrapper}>
-          <TouchableOpacity onPress={() => onTakePhotos(job)}>
+        {/* Photos Card */}
+        <Wrapper variant="default" style={styles.actionCard}>
+          <TouchableOpacity onPress={handleTakePhotos}>
             <View style={styles.actionHeader}>
               <View style={styles.actionIcon}>
                 <Text style={styles.actionIconText}>📸</Text>
@@ -348,8 +464,8 @@ export default function JobDetailsScreen({
           </TouchableOpacity>
         </Wrapper>
 
-        {/* PDF Generation Wrapper */}
-        <Wrapper variant={canGeneratePDF() ? "default" : "flat"} style={[styles.actionWrapper, !canGeneratePDF() && styles.disabledWrapper]}>
+        {/* PDF Generation Card */}
+        <Wrapper variant={canGeneratePDF() ? "default" : "flat"} style={[styles.actionCard, !canGeneratePDF() && styles.disabledCard]}>
           <TouchableOpacity 
             onPress={() => canGeneratePDF() ? onGeneratePDF(job) : Alert.alert('Cannot Generate PDF', 'Please take photos first to document your work.')}
           >
@@ -377,8 +493,8 @@ export default function JobDetailsScreen({
           </TouchableOpacity>
         </Wrapper>
 
-        {/* Signature Wrapper */}
-        <Wrapper variant="default" style={styles.actionWrapper}>
+        {/* Signature Card */}
+        <Wrapper variant="default" style={styles.actionCard}>
           <TouchableOpacity onPress={() => onGetSignature(job)}>
             <View style={styles.actionHeader}>
               <View style={styles.actionIcon}>
@@ -428,13 +544,30 @@ export default function JobDetailsScreen({
           </View>
         </View>
       </Wrapper>
+
+      {/* Free tier upgrade hint */}
+      {usageStats?.tierInfo.name === 'Free' && (
+        <Wrapper variant="flat" style={styles.upgradeHint}>
+          <Text style={styles.upgradeHintTitle}>💼 Ready to Go Pro?</Text>
+          <Text style={styles.upgradeHintText}>
+            Unlimited jobs & photos, professional PDFs, client portal access, and priority support.
+          </Text>
+          <Button 
+            variant="success" 
+            onPress={handleUpgrade}
+            style={styles.upgradeHintButton}
+            size="small"
+          >
+            Upgrade for $19/month
+          </Button>
+        </Wrapper>
+      )}
     </ScrollView>
   );
 }
 
-// Styles remain the same...
 const styles = StyleSheet.create({
-  Wrapper: {
+  container: {
     flex: 1,
     backgroundColor: Colors.background,
   },
@@ -460,7 +593,10 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     marginTop: Spacing.xs,
   },
-  statusWrapper: {
+  headerRight: {
+    alignItems: 'flex-end',
+  },
+  statusContainer: {
     marginHorizontal: Spacing.screenPadding,
     marginTop: -Spacing.lg,
     marginBottom: Spacing.md,
@@ -514,7 +650,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
   },
-  remoteStatusWrapper: {
+  remoteStatusContainer: {
     backgroundColor: Colors.gray50,
     borderRadius: Sizes.radiusMedium,
     padding: Spacing.md,
@@ -559,12 +695,12 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.borderLight,
   },
   remoteActionButton: {},
-  actionsWrapper: {
+  actionsContainer: {
     paddingHorizontal: Spacing.screenPadding,
     gap: Spacing.md,
   },
-  actionWrapper: {},
-  disabledWrapper: {
+  actionCard: {},
+  disabledCard: {
     opacity: 0.6,
   },
   actionHeader: {
@@ -611,9 +747,30 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
   },
+  previewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
   previewTitle: {
     ...Typography.label,
-    marginBottom: Spacing.sm,
+  },
+  limitInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  miniUpgradeButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Sizes.radiusSmall,
+  },
+  miniUpgradeText: {
+    ...Typography.caption,
+    color: Colors.textInverse,
+    fontWeight: 'bold',
   },
   photoScroll: {
     marginHorizontal: -Spacing.xs,
@@ -644,5 +801,28 @@ const styles = StyleSheet.create({
   progressText: {
     ...Typography.body,
     color: Colors.textPrimary,
+  },
+  upgradeHint: {
+    marginHorizontal: Spacing.screenPadding,
+    marginBottom: Spacing.xl,
+    backgroundColor: Colors.success + '10',
+    borderColor: Colors.success + '30',
+    alignItems: 'center',
+  },
+  upgradeHintTitle: {
+    ...Typography.h4,
+    color: Colors.success,
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  upgradeHintText: {
+    ...Typography.bodySmall,
+    color: Colors.success,
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  upgradeHintButton: {
+    // Button component handles styling
   },
 });

@@ -1,4 +1,4 @@
-// src/screens/CreateJobScreen.tsx - Updated with KeyboardAvoidingWrapper
+// src/screens/CreateJobScreen.tsx - Updated with proper limit enforcement
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,10 +11,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Job } from './HomeScreen';
 import { validateJobData } from '../utils/JobUtils';
-import { revenueCatService } from '../services/RevenueCatService';
+import { checkCanCreateJob, showLimitAlert, getUserUsageStats } from '../services/JobLimitService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Typography, Spacing, Sizes } from '../theme';
-import { Input, Button, Wrapper, KeyboardAvoidingWrapper } from '../components/ui';
+import { Input, Button, Wrapper, KeyboardAvoidingWrapper, Badge } from '../components/ui';
 
 const jobSchema = z.object({
   clientName: z.string().min(1, 'Client name is required'),
@@ -34,9 +34,8 @@ interface CreateJobScreenProps {
 }
 
 export default function CreateJobScreen({ onJobCreated, onUpgrade, editJob }: CreateJobScreenProps) {
-  const [userTier, setUserTier] = useState<string>('free');
-  const [currentJobCount, setCurrentJobCount] = useState<number>(0);
-  const [showUpgradeWarning, setShowUpgradeWarning] = useState<boolean>(false);
+  const [usageStats, setUsageStats] = useState<any>(null);
+  const [limitCheck, setLimitCheck] = useState<any>(null);
   const [isCheckingLimits, setIsCheckingLimits] = useState<boolean>(false);
 
   const {
@@ -58,31 +57,31 @@ export default function CreateJobScreen({ onJobCreated, onUpgrade, editJob }: Cr
   });
 
   useEffect(() => {
-    loadUserTierAndJobCount();
+    loadUsageData();
   }, []);
 
-  const loadUserTierAndJobCount = async () => {
+  const loadUsageData = async () => {
     try {
-      // Get current subscription status
-      const customerInfo = await revenueCatService.getCustomerInfo();
-      setUserTier(customerInfo.tier);
-
-      // Get current job count
-      const savedJobs = await AsyncStorage.getItem('proofly_jobs');
-      const jobCount = savedJobs ? JSON.parse(savedJobs).length : 0;
-      setCurrentJobCount(jobCount);
-
-      // Check if we should show upgrade warning for new jobs
-      if (!editJob) {
-        const limitCheck = revenueCatService.canPerformAction(customerInfo.tier, 'create_job', { jobCount });
-        if (!limitCheck.allowed) {
-          setShowUpgradeWarning(true);
-        }
-      }
+      const [stats, canCreate] = await Promise.all([
+        getUserUsageStats(),
+        checkCanCreateJob()
+      ]);
+      
+      setUsageStats(stats);
+      setLimitCheck(canCreate);
     } catch (error) {
-      console.error('Error loading user data:', error);
-      // Default to free tier if there's an error
-      setUserTier('free');
+      console.error('Error loading usage data:', error);
+    }
+  };
+
+  const handleUpgrade = () => {
+    if (onUpgrade) {
+      onUpgrade();
+    } else {
+      Alert.alert(
+        'Upgrade Coming Soon!', 
+        'RevenueCat integration is being finalized. Contact support@proofly.com for early Pro access!\n\n🎉 Early users get 50% off first 3 months!'
+      );
     }
   };
 
@@ -94,57 +93,65 @@ export default function CreateJobScreen({ onJobCreated, onUpgrade, editJob }: Cr
       return;
     }
 
-    // Check job limits for new jobs
+    // CRITICAL: Check job limits for new jobs
     if (!editJob) {
       setIsCheckingLimits(true);
       
-      const limitCheck = revenueCatService.canPerformAction(userTier, 'create_job', { jobCount: currentJobCount });
-      
-      if (!limitCheck.allowed) {
-        setIsCheckingLimits(false);
+      try {
+        const limitCheck = await checkCanCreateJob();
         
-        Alert.alert(
-          'Upgrade Required',
-          limitCheck.reason || 'You have reached your job creation limit.',
-          [
-            { text: 'Maybe Later', style: 'cancel' },
-            { 
-              text: 'Upgrade Now', 
-              onPress: () => {
-                if (onUpgrade) {
-                  onUpgrade();
-                } else {
-                  Alert.alert('Upgrade', 'Upgrade functionality coming soon!');
-                }
-              }
-            }
-          ]
-        );
-        return;
+        if (!limitCheck.allowed) {
+          setIsCheckingLimits(false);
+          
+          // Show blocking alert with upgrade option
+          showLimitAlert(limitCheck, handleUpgrade);
+          return;
+        }
+        
+        // If near limit, show warning but allow creation
+        if (limitCheck.upgradePrompt && limitCheck.upgradePrompt.urgency !== 'low') {
+          Alert.alert(
+            limitCheck.upgradePrompt.title,
+            limitCheck.upgradePrompt.message + '\n\nContinue creating this job?',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => setIsCheckingLimits(false) },
+              { text: 'Upgrade Now', onPress: handleUpgrade },
+              { text: 'Create Job', onPress: () => proceedWithJobCreation(data) }
+            ]
+          );
+          return;
+        }
+        
+        setIsCheckingLimits(false);
+      } catch (error) {
+        console.error('Error checking limits:', error);
+        setIsCheckingLimits(false);
+        // Continue anyway - don't block users due to service errors
       }
-      
-      setIsCheckingLimits(false);
     }
 
-    // Create/update the job
-    const newJob: Job = {
-      id: editJob?.id || Date.now().toString(),
-      clientName: data.clientName,
-      clientEmail: data.clientEmail,
-      clientPhone: data.clientPhone,
-      serviceType: data.serviceType,
-      description: data.description,
-      address: data.address,
-      status: 'created',
-      createdAt: editJob?.createdAt || new Date().toISOString(),
-      photos: editJob?.photos || [],
-      signature: editJob?.signature,
-      clientSignedName: editJob?.clientSignedName,
-      jobSatisfaction: editJob?.jobSatisfaction,
-      completedAt: editJob?.completedAt,
-    };
+    proceedWithJobCreation(data);
+  };
 
+  const proceedWithJobCreation = async (data: JobFormData) => {
     try {
+      const newJob: Job = {
+        id: editJob?.id || Date.now().toString(),
+        clientName: data.clientName,
+        clientEmail: data.clientEmail,
+        clientPhone: data.clientPhone,
+        serviceType: data.serviceType,
+        description: data.description,
+        address: data.address,
+        status: 'created',
+        createdAt: editJob?.createdAt || new Date().toISOString(),
+        photos: editJob?.photos || [],
+        signature: editJob?.signature,
+        clientSignedName: editJob?.clientSignedName,
+        jobSatisfaction: editJob?.jobSatisfaction,
+        completedAt: editJob?.completedAt,
+      };
+
       // Save to local storage
       const existingJobsData = await AsyncStorage.getItem('proofly_jobs');
       const existingJobs: Job[] = existingJobsData ? JSON.parse(existingJobsData) : [];
@@ -159,6 +166,9 @@ export default function CreateJobScreen({ onJobCreated, onUpgrade, editJob }: Cr
       }
       
       await AsyncStorage.setItem('proofly_jobs', JSON.stringify(existingJobs));
+
+      // Refresh usage stats
+      await loadUsageData();
 
       // Success! Call the callback
       if (onJobCreated) {
@@ -184,15 +194,28 @@ export default function CreateJobScreen({ onJobCreated, onUpgrade, editJob }: Cr
     }
   };
 
-  const handleUpgradePrompt = () => {
-    if (onUpgrade) {
-      onUpgrade();
-    } else {
-      Alert.alert('Upgrade', 'Upgrade functionality coming soon!');
+  // Get appropriate UI state based on limits
+  const getUIState = () => {
+    if (!usageStats || !limitCheck) {
+      return { showWarning: false, isBlocked: false, warningType: 'none' };
     }
+
+    if (!limitCheck.allowed) {
+      return { showWarning: true, isBlocked: true, warningType: 'blocked' };
+    }
+
+    if (limitCheck.upgradePrompt) {
+      return { 
+        showWarning: true, 
+        isBlocked: false, 
+        warningType: limitCheck.upgradePrompt.urgency 
+      };
+    }
+
+    return { showWarning: false, isBlocked: false, warningType: 'none' };
   };
 
-  const tierInfo = revenueCatService.getTierInfo(userTier);
+  const uiState = getUIState();
 
   return (
     <KeyboardAvoidingWrapper contentContainerStyle={styles.contentContainer}>
@@ -203,41 +226,70 @@ export default function CreateJobScreen({ onJobCreated, onUpgrade, editJob }: Cr
           {editJob ? 'Update job information' : 'Create a new service job'}
         </Text>
         
-        {/* Job limit indicator for free users */}
-        {userTier === 'free' && !editJob && (
-          <View style={styles.limitIndicator}>
-            <Text style={styles.limitText}>
-              Jobs: {currentJobCount}/{tierInfo.limits.maxJobs} (Free Plan)
-            </Text>
+        {/* Usage indicator for all users */}
+        {usageStats && (
+          <View style={styles.usageIndicator}>
+            <Badge 
+              variant={uiState.isBlocked ? 'error' : uiState.showWarning ? 'warning' : 'primary'}
+              style={styles.usageBadge}
+            >
+              {usageStats.jobsUsed} {usageStats.tierInfo.name} Plan
+            </Badge>
           </View>
         )}
       </View>
 
-      {/* Upgrade Warning */}
-      {showUpgradeWarning && !editJob && (
-        <View style={styles.upgradeWarningContainer}>
-          <Wrapper variant="elevated" style={styles.upgradeWarning}>
-            <Text style={styles.warningTitle}>🚀 Job Limit Reached!</Text>
-            <Text style={styles.warningText}>
-              You've created {currentJobCount}/20 jobs on the free plan. Upgrade to Pro for unlimited jobs!
-            </Text>
-            <View style={styles.warningButtons}>
-              <Button 
-                variant="success" 
-                onPress={handleUpgradePrompt}
-                style={styles.upgradeButton}
-              >
-                Upgrade to Pro ($19/mo)
-              </Button>
-              <Button 
-                variant="outline" 
-                size="small"
-                onPress={() => setShowUpgradeWarning(false)}
-                style={styles.dismissButton}
-              >
-                Maybe Later
-              </Button>
-            </View>
+      {/* Limit Warning/Blocking */}
+      {uiState.showWarning && !editJob && (
+        <View style={styles.warningContainer}>
+          <Wrapper 
+            variant="elevated" 
+            style={[
+              styles.warningWrapper,
+              uiState.isBlocked ? styles.blockedWarning : styles.cautionWarning
+            ]}
+          >
+            {uiState.isBlocked ? (
+              <>
+                <Text style={styles.blockedTitle}>🚨 Job Limit Reached!</Text>
+                <Text style={styles.blockedText}>
+                  You've created {limitCheck?.currentCount}/{limitCheck?.limit} jobs on the free plan.
+                  {'\n\n'}Upgrade to Pro for unlimited jobs and professional features!
+                </Text>
+                <View style={styles.warningButtons}>
+                  <Button 
+                    variant="primary" 
+                    onPress={handleUpgrade}
+                    style={styles.upgradeButton}
+                  >
+                    🚀 Upgrade to Pro - $19/mo
+                  </Button>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.warningTitle}>
+                  {uiState.warningType === 'high' ? '⚠️ Almost at Limit!' : '💡 Consider Upgrading'}
+                </Text>
+                <Text style={styles.warningText}>
+                  You've used {limitCheck?.currentCount}/{limitCheck?.limit} jobs. 
+                  {uiState.warningType === 'high' 
+                    ? ' Upgrade now to avoid hitting your limit!'
+                    : ' Upgrade for unlimited jobs and professional features.'
+                  }
+                </Text>
+                <View style={styles.warningButtons}>
+                  <Button 
+                    variant={uiState.warningType === 'high' ? 'primary' : 'success'} 
+                    onPress={handleUpgrade}
+                    style={styles.upgradeButton}
+                    size="small"
+                  >
+                    {uiState.warningType === 'high' ? '⬆️ Upgrade Now' : '🚀 Upgrade to Pro'}
+                  </Button>
+                </View>
+              </>
+            )}
           </Wrapper>
         </View>
       )}
@@ -349,30 +401,30 @@ export default function CreateJobScreen({ onJobCreated, onUpgrade, editJob }: Cr
 
         {/* Submit Button */}
         <Button
-          variant={isValid && !showUpgradeWarning ? "primary" : "outline"}
+          variant={isValid && !uiState.isBlocked ? "primary" : "outline"}
           onPress={handleSubmit(onSubmit)}
-          disabled={!isValid || showUpgradeWarning || isCheckingLimits}
+          disabled={!isValid || uiState.isBlocked || isCheckingLimits}
           loading={isCheckingLimits}
           style={styles.submitButton}
         >
           {isCheckingLimits ? 'Checking Limits...' : 
-           showUpgradeWarning ? 'Upgrade Required' :
+           uiState.isBlocked ? 'Upgrade Required' :
            editJob ? 'Update Job' : 'Create Job'}
         </Button>
 
-        {/* Upgrade hint for free users */}
-        {userTier === 'free' && !showUpgradeWarning && !editJob && (
-          <View style={styles.upgradeHint}>
-            <Text style={styles.upgradeHintText}>
-              💡 Upgrade to Pro for unlimited jobs, professional PDFs, and client portal
+        {/* Pro benefits hint for free users */}
+        {usageStats?.tierInfo.name === 'Free' && !uiState.isBlocked && (
+          <View style={styles.proHint}>
+            <Text style={styles.proHintText}>
+              💼 Pro users get unlimited jobs, professional PDFs, and client portal access
             </Text>
             <Button 
               variant="ghost" 
               size="small"
-              onPress={handleUpgradePrompt}
-              style={styles.upgradeHintButton}
+              onPress={handleUpgrade}
+              style={styles.proHintButton}
             >
-              Learn More
+              Learn More About Pro
             </Button>
           </View>
         )}
@@ -401,47 +453,62 @@ const styles = StyleSheet.create({
     color: Colors.textInverse,
     opacity: 0.8,
   },
-  limitIndicator: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: Sizes.radiusSmall,
+  usageIndicator: {
+    marginTop: Spacing.md,
     alignSelf: 'flex-start',
-    marginTop: Spacing.sm,
   },
-  limitText: {
-    ...Typography.caption,
-    color: Colors.textInverse,
-    fontWeight: 'bold',
+  usageBadge: {
+    // Badge component handles styling
   },
-  upgradeWarningContainer: {
+  warningContainer: {
     marginHorizontal: Spacing.screenPadding,
     marginTop: -Spacing.lg,
     marginBottom: Spacing.md,
   },
-  upgradeWarning: {
+  warningWrapper: {
+    // Base wrapper styling
+  },
+  blockedWarning: {
+    backgroundColor: Colors.error + '15',
+    borderColor: Colors.error + '40',
+    borderWidth: 2,
+  },
+  cautionWarning: {
     backgroundColor: Colors.warning + '15',
     borderColor: Colors.warning + '40',
     borderWidth: 2,
+  },
+  blockedTitle: {
+    ...Typography.h4,
+    color: Colors.error,
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  blockedText: {
+    ...Typography.body,
+    color: Colors.error,
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+    lineHeight: 24,
   },
   warningTitle: {
     ...Typography.h4,
     color: Colors.warning,
     marginBottom: Spacing.sm,
+    textAlign: 'center',
   },
   warningText: {
     ...Typography.body,
     color: Colors.warning,
     marginBottom: Spacing.md,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   warningButtons: {
-    gap: Spacing.sm,
+    // Container for warning buttons
   },
   upgradeButton: {
     // Button component handles styling
-  },
-  dismissButton: {
-    alignSelf: 'center',
   },
   formContainer: {
     margin: Spacing.screenPadding,
@@ -458,20 +525,21 @@ const styles = StyleSheet.create({
   submitButton: {
     marginTop: Spacing.lg,
   },
-  upgradeHint: {
+  proHint: {
     alignItems: 'center',
     marginTop: Spacing.lg,
     paddingTop: Spacing.lg,
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
   },
-  upgradeHintText: {
+  proHintText: {
     ...Typography.caption,
     color: Colors.textSecondary,
     textAlign: 'center',
     marginBottom: Spacing.sm,
+    lineHeight: 18,
   },
-  upgradeHintButton: {
+  proHintButton: {
     // Button component handles styling
   },
 });

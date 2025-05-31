@@ -1,9 +1,9 @@
-// App.tsx - Updated with Remember Me auto-login functionality
+// App.tsx - Updated navigation with upgrade flow integration
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { TouchableOpacity, Text, View, ActivityIndicator, StyleSheet, Alert, TextInput } from 'react-native';
+import { TouchableOpacity, Text, View, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-gesture-handler';
 
@@ -15,7 +15,7 @@ import CameraScreen from './src/screens/CameraScreen';
 import SimpleSignatureScreen from './src/screens/SimpleSignatureScreen';
 import PDFGenerator from './src/screens/PDFGenerator';
 import ProfileScreen from './src/screens/ProfileScreen';
-import AuthScreen from './src/screens/AuthScreen'; // Updated auth screen
+import AuthScreen from './src/screens/AuthScreen';
 
 // Import services
 import { getCurrentUser, supabase } from './src/services/SupabaseHTTPClient';
@@ -24,14 +24,12 @@ import { backgroundSyncService } from './src/services/BackgroundSyncService';
 import { migrationService } from './src/services/MigrationService';
 import { remoteSigningService } from './src/services/RemoteSigningService';
 import { revenueCatService } from './src/services/RevenueCatService';
+import { jobLimitService } from './src/services/JobLimitService';
 
 // Import utilities
 import { generateUUID, calculateJobStatus } from './src/utils/JobUtils';
 
-// Import UI components
-import { KeyboardAvoidingWrapper, Wrapper, Input, Button } from './src/components/ui';
-
-// Types remain the same...
+// Types
 export type RootStackParamList = {
   Auth: undefined;
   Home: undefined;
@@ -55,22 +53,22 @@ export interface JobFormData {
 
 const Stack = createStackNavigator<RootStackParamList>();
 
-// Enhanced Loading Screen with Remember Me status
+// Enhanced Loading Screen
 function LoadingScreen({ message = 'Getting your jobs...' }: { message?: string }) {
   return (
-    <View style={styles.loadingWrapper}>
+    <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color="#007AFF" />
       <Text style={styles.loadingText}>{message}</Text>
     </View>
   );
 }
 
-// Simplified Auth Screen wrapper (using new AuthScreen component)
+// Auth Screen wrapper
 function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
   return <AuthScreen onAuthSuccess={onAuthSuccess} />;
 }
 
-// All other screen wrappers remain the same...
+// Home Screen with sync status and upgrade checks
 function HomeScreenWithNav({ navigation }: any) {
   const [syncStatus, setSyncStatus] = useState<any>(null);
 
@@ -79,10 +77,40 @@ function HomeScreenWithNav({ navigation }: any) {
       setSyncStatus(status);
     });
 
+    // Check for strategic upgrade moments
+    checkStrategicUpgradeMoments();
+
     return () => {
       backgroundSyncService.destroy();
     };
   }, []);
+
+  const checkStrategicUpgradeMoments = async () => {
+    try {
+      const shouldShow = await jobLimitService.shouldShowStrategicPrompt();
+      if (!shouldShow) return;
+
+      const moments = await jobLimitService.getStrategicUpgradeMoments();
+      const immediatePrompts = moments.filter(m => m.timing === 'immediate');
+      
+      if (immediatePrompts.length > 0) {
+        const prompt = immediatePrompts[0];
+        setTimeout(() => {
+          Alert.alert(
+            prompt.title,
+            prompt.message,
+            [
+              { text: 'Maybe Later', style: 'cancel' },
+              { text: 'Upgrade Now', onPress: () => navigation.navigate('Upgrade', { reason: 'strategic' }) }
+            ]
+          );
+          jobLimitService.markUpgradePromptShown();
+        }, 2000); // Small delay to not interrupt user
+      }
+    } catch (error) {
+      console.error('Error checking strategic upgrade moments:', error);
+    }
+  };
 
   React.useEffect(() => {
     navigation.setOptions({
@@ -114,7 +142,7 @@ function HomeScreenWithNav({ navigation }: any) {
   />;
 }
 
-// Other screen wrappers remain unchanged (CreateJobScreenWithNav, CameraScreenWithNav, etc.)
+// Create Job Screen with limits
 function CreateJobScreenWithNav({ route, navigation }: any) {
   const { editJob } = route.params || {};
 
@@ -191,6 +219,7 @@ function CreateJobScreenWithNav({ route, navigation }: any) {
   );
 }
 
+// Camera Screen with photo limits
 function CameraScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
   const photosRef = React.useRef(job.photos || []);
@@ -226,6 +255,10 @@ function CameraScreenWithNav({ route, navigation }: any) {
     }
   };
 
+  const handleUpgrade = () => {
+    navigation.navigate('Upgrade', { reason: 'photo_limit' });
+  };
+
   React.useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', async (e: any) => {
       e.preventDefault();
@@ -242,10 +275,12 @@ function CameraScreenWithNav({ route, navigation }: any) {
       navigation.navigate('JobDetails', { job: updatedJob });
     }}
     onPhotosChange={(photos: any[]) => { photosRef.current = photos; }}
+    onUpgrade={handleUpgrade}
     initialPhotos={job.photos || []}
   />;
 }
 
+// Signature Screen
 function SignatureScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
@@ -322,6 +357,7 @@ function SignatureScreenWithNav({ route, navigation }: any) {
   />;
 }
 
+// PDF Generator Screen
 function PDFGeneratorWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
@@ -367,11 +403,12 @@ function PDFGeneratorWithNav({ route, navigation }: any) {
   return <PDFGenerator jobData={jobData} onPDFGenerated={handlePDFGenerated} />;
 }
 
+// Profile Screen
 function ProfileScreenWithNav({ navigation, onSignOut }: any) {
   const handleSignOut = async () => {
     try {
       await backgroundSyncService.clearSyncQueue();
-      await authStorageService.clearAuthData(); // Clear remember me data
+      await authStorageService.clearAuthData();
       await supabase.signOut();
       onSignOut();
     } catch (error) {
@@ -383,6 +420,7 @@ function ProfileScreenWithNav({ navigation, onSignOut }: any) {
   return <ProfileScreen onSignOut={handleSignOut} />;
 }
 
+// Job Details Screen with upgrade integration
 function JobDetailsScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
@@ -398,6 +436,10 @@ function JobDetailsScreenWithNav({ route, navigation }: any) {
 
   const handleEditJob = (editedJob: Job) => {
     navigation.navigate('CreateJob', { editJob: editedJob });
+  };
+
+  const handleUpgrade = () => {
+    navigation.navigate('Upgrade', { reason: 'general' });
   };
 
   const handleJobUpdate = async (updatedJob: Job) => {
@@ -430,9 +472,11 @@ function JobDetailsScreenWithNav({ route, navigation }: any) {
     onGetSignature={(job: Job) => navigation.navigate('Signature', { job })}
     onGeneratePDF={(job: Job) => navigation.navigate('PDFGenerator', { job })}
     onJobUpdate={handleJobUpdate}
+    onUpgrade={handleUpgrade}
   />;
 }
 
+// Upgrade Screen
 function UpgradeScreenWithNav({ route, navigation }: any) {
   const { reason } = route.params || {};
 
@@ -459,18 +503,45 @@ function UpgradeScreenWithNav({ route, navigation }: any) {
     }
   };
 
+  const getReasonMessage = (reason?: string) => {
+    switch (reason) {
+      case 'job_limit':
+        return 'You\'ve reached your job limit. Upgrade to continue creating unlimited jobs!';
+      case 'photo_limit':
+        return 'You\'ve reached the photo limit for this job. Upgrade for unlimited photos!';
+      case 'pdf_branding':
+        return 'Add your professional branding to PDFs and impress clients even more!';
+      default:
+        return 'Unlock unlimited potential for your service business!';
+    }
+  };
+
   return (
-    <View style={styles.upgradeWrapper}>
-      <Text style={styles.upgradeTitle}>Upgrade to Pro</Text>
-      <Text style={styles.upgradeText}>
-        Reason: {reason || 'general'}{'\n\n'}
-        This is demo mode. In the real app, this would show the upgrade screen with RevenueCat pricing.
-      </Text>
+    <View style={styles.upgradeContainer}>
+      <Text style={styles.upgradeTitle}>🚀 Upgrade to Pro</Text>
+      <Text style={styles.upgradeReason}>{getReasonMessage(reason)}</Text>
+      
+      <View style={styles.upgradeFeatures}>
+        <Text style={styles.upgradeFeatureTitle}>What you get with Pro:</Text>
+        <Text style={styles.upgradeFeature}>✅ Unlimited jobs forever</Text>
+        <Text style={styles.upgradeFeature}>✅ Unlimited photos per job</Text>
+        <Text style={styles.upgradeFeature}>✅ Professional branded PDFs</Text>
+        <Text style={styles.upgradeFeature}>✅ Client review portal</Text>
+        <Text style={styles.upgradeFeature}>✅ Priority support</Text>
+        <Text style={styles.upgradeFeature}>✅ Cloud backup & sync</Text>
+      </View>
+
+      <View style={styles.upgradePricing}>
+        <Text style={styles.upgradePrice}>Just $19/month</Text>
+        <Text style={styles.upgradePriceSubtext}>Less than one small job!</Text>
+      </View>
+      
       <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
         <Text style={styles.upgradeButtonText}>Try Demo Purchase</Text>
       </TouchableOpacity>
+      
       <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-        <Text style={styles.closeButtonText}>Close</Text>
+        <Text style={styles.closeButtonText}>Maybe Later</Text>
       </TouchableOpacity>
     </View>
   );
@@ -491,7 +562,7 @@ export default function App() {
       // Run migration
       await migrationService.runMigrationIfNeeded();
       
-      // ENHANCED: Check for stored auth data first
+      // Check for stored auth data first
       console.log('🔐 Checking for stored authentication...');
       const hasStoredAuth = await authStorageService.hasValidStoredAuth();
       
@@ -500,9 +571,7 @@ export default function App() {
         const storedAuthData = await authStorageService.getStoredAuthData();
         
         if (storedAuthData) {
-          // Try to verify the stored token with Supabase
           try {
-            // Set the token in the HTTP client
             const user = await getCurrentUser();
             if (user && user.email === storedAuthData.email) {
               console.log('✅ Auto-login successful:', user.email);
@@ -596,7 +665,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  loadingWrapper: { 
+  loadingContainer: { 
     flex: 1, 
     justifyContent: 'center', 
     alignItems: 'center', 
@@ -629,7 +698,7 @@ const styles = StyleSheet.create({
   profileButtonText: { 
     fontSize: 24 
   },
-  upgradeWrapper: { 
+  upgradeContainer: { 
     flex: 1, 
     justifyContent: 'center', 
     alignItems: 'center', 
@@ -637,25 +706,67 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa' 
   },
   upgradeTitle: { 
-    fontSize: 24, 
+    fontSize: 28, 
     fontWeight: 'bold', 
     color: '#333', 
-    marginBottom: 20 
+    marginBottom: 10,
+    textAlign: 'center'
   },
-  upgradeText: { 
-    fontSize: 16, 
-    color: '#666', 
-    textAlign: 'center', 
-    marginBottom: 30, 
-    lineHeight: 24 
+  upgradeReason: {
+    fontSize: 18,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 24
+  },
+  upgradeFeatures: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 30,
+    width: '100%',
+    maxWidth: 300
+  },
+  upgradeFeatureTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+    textAlign: 'center'
+  },
+  upgradeFeature: {
+    fontSize: 14,
+    color: '#34C759',
+    marginBottom: 8,
+    fontWeight: '500'
+  },
+  upgradePricing: {
+    alignItems: 'center',
+    marginBottom: 30
+  },
+  upgradePrice: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 5
+  },
+  upgradePriceSubtext: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic'
   },
   upgradeButton: { 
     backgroundColor: '#34C759', 
-    padding: 16, 
-    borderRadius: 8, 
-    minWidth: 200, 
+    padding: 18, 
+    borderRadius: 12, 
+    minWidth: 250, 
     alignItems: 'center', 
-    marginBottom: 15 
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3
   },
   upgradeButtonText: { 
     color: 'white', 
@@ -663,14 +774,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold' 
   },
   closeButton: { 
-    backgroundColor: '#666', 
+    backgroundColor: 'transparent', 
     padding: 12, 
     borderRadius: 8, 
     minWidth: 200, 
     alignItems: 'center' 
   },
   closeButtonText: { 
-    color: 'white', 
+    color: '#666', 
     fontSize: 16 
   },
 });
