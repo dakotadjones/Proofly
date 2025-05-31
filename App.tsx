@@ -1,4 +1,4 @@
-// App.tsx - Updated with KeyboardAvoidingWrapper throughout
+// App.tsx - Updated with Remember Me auto-login functionality
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -15,9 +15,11 @@ import CameraScreen from './src/screens/CameraScreen';
 import SimpleSignatureScreen from './src/screens/SimpleSignatureScreen';
 import PDFGenerator from './src/screens/PDFGenerator';
 import ProfileScreen from './src/screens/ProfileScreen';
+import AuthScreen from './src/screens/AuthScreen'; // Updated auth screen
 
 // Import services
 import { getCurrentUser, supabase } from './src/services/SupabaseHTTPClient';
+import { authStorageService } from './src/services/AuthStorageService';
 import { backgroundSyncService } from './src/services/BackgroundSyncService';
 import { migrationService } from './src/services/MigrationService';
 import { remoteSigningService } from './src/services/RemoteSigningService';
@@ -29,7 +31,7 @@ import { generateUUID, calculateJobStatus } from './src/utils/JobUtils';
 // Import UI components
 import { KeyboardAvoidingWrapper, Wrapper, Input, Button } from './src/components/ui';
 
-// Types
+// Types remain the same...
 export type RootStackParamList = {
   Auth: undefined;
   Home: undefined;
@@ -53,291 +55,26 @@ export interface JobFormData {
 
 const Stack = createStackNavigator<RootStackParamList>();
 
-// Loading Screen
-function LoadingScreen() {
+// Enhanced Loading Screen with Remember Me status
+function LoadingScreen({ message = 'Getting your jobs...' }: { message?: string }) {
   return (
     <View style={styles.loadingWrapper}>
       <ActivityIndicator size="large" color="#007AFF" />
-      <Text style={styles.loadingText}>Getting your jobs...</Text>
+      <Text style={styles.loadingText}>{message}</Text>
     </View>
   );
 }
 
-// Updated Auth Screen with KeyboardAvoidingWrapper
+// Simplified Auth Screen wrapper (using new AuthScreen component)
 function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    fullName: '',
-    companyName: '',
-    phone: ''
-  });
-
-  const validateForm = () => {
-    if (!formData.email || !formData.password) {
-      Alert.alert('Error', 'Email and password are required');
-      return false;
-    }
-    
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
-      return false;
-    }
-    
-    if (formData.password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
-      return false;
-    }
-    
-    if (isSignUp && !formData.fullName.trim()) {
-      Alert.alert('Error', 'Full name is required');
-      return false;
-    }
-    
-    return true;
-  };
-
-  const handleSignIn = async () => {
-    if (!validateForm()) return;
-
-    setLoading(true);
-    try {
-      const result = await supabase.signIn(formData.email.trim(), formData.password);
-      if (result.error) {
-        Alert.alert('Sign In Error', result.error);
-      } else {
-        console.log('Sign in successful:', result.user?.email);
-        onAuthSuccess();
-      }
-    } catch (error) {
-      console.error('Sign in error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignUp = async () => {
-    if (!validateForm()) return;
-
-    setLoading(true);
-    try {
-      const result = await supabase.signUp(
-        formData.email.trim(), 
-        formData.password, 
-        {
-          full_name: formData.fullName.trim(),
-          company_name: formData.companyName.trim() || null,
-          phone: formData.phone.trim() || null,
-        }
-      );
-
-      if (result.error) {
-        Alert.alert('Sign Up Error', result.error);
-      } else {
-        Alert.alert(
-          'Success!', 
-          'Account created! Please check your email to verify your account.',
-          [{ 
-            text: 'OK', 
-            onPress: () => {
-              setIsSignUp(false);
-              // Clear form except email for easier sign in
-              setFormData(prev => ({
-                ...prev,
-                password: '',
-                fullName: '',
-                companyName: '',
-                phone: ''
-              }));
-            }
-          }]
-        );
-      }
-    } catch (error) {
-      console.error('Sign up error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resetPassword = async () => {
-    if (!formData.email.trim()) {
-      Alert.alert('Error', 'Please enter your email address first');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { error } = await supabase.resetPasswordForEmail(formData.email.trim());
-      
-      if (error) {
-        Alert.alert('Error', error);
-      } else {
-        Alert.alert(
-          'Password Reset Email Sent', 
-          `Check your email (${formData.email}) for password reset instructions.`
-        );
-      }
-    } catch (error) {
-      console.error('Password reset error:', error);
-      Alert.alert('Error', 'Failed to send password reset email');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <KeyboardAvoidingWrapper 
-      keyboardVerticalOffset={0} // No header for auth screen
-      contentContainerStyle={styles.authContentWrapper}
-    >
-      <View style={styles.authHeader}>
-        <Text style={styles.authTitle}>
-          {isSignUp ? 'Create Account' : 'Welcome Back'}
-        </Text>
-        <Text style={styles.authSubtitle}>
-          {isSignUp 
-            ? 'Start documenting your service jobs professionally' 
-            : 'Sign in to your Proofly account'
-          }
-        </Text>
-      </View>
-
-      <Wrapper variant="elevated" style={styles.authForm}>
-        {isSignUp && (
-          <>
-            <Input
-              label="Full Name"
-              placeholder="Your full name"
-              value={formData.fullName}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, fullName: text }))}
-              autoCapitalize="words"
-              autoCorrect={false}
-              editable={!loading}
-              required
-            />
-
-            <Input
-              label="Company Name"
-              placeholder="Your company name (optional)"
-              value={formData.companyName}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, companyName: text }))}
-              autoCapitalize="words"
-              autoCorrect={false}
-              editable={!loading}
-            />
-
-            <Input
-              label="Phone Number"
-              placeholder="(555) 123-4567"
-              value={formData.phone}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
-              keyboardType="phone-pad"
-              autoCorrect={false}
-              editable={!loading}
-            />
-          </>
-        )}
-
-        <Input
-          label="Email Address"
-          placeholder="your@email.com"
-          value={formData.email}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!loading}
-          required
-        />
-
-        <Input
-          label="Password"
-          placeholder="Minimum 6 characters"
-          value={formData.password}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!loading}
-          required
-        />
-
-        <Button
-          variant="primary"
-          onPress={isSignUp ? handleSignUp : handleSignIn}
-          disabled={loading}
-          loading={loading}
-          style={styles.primaryButton}
-        >
-          {isSignUp ? 'Create Account' : 'Sign In'}
-        </Button>
-
-        {!isSignUp && (
-          <Button 
-            variant="ghost" 
-            onPress={resetPassword}
-            disabled={loading}
-            style={styles.forgotButton}
-          >
-            Forgot Password?
-          </Button>
-        )}
-
-        <View style={styles.switchMode}>
-          <Text style={styles.switchModeText}>
-            {isSignUp ? 'Already have an account?' : "Don't have an account?"}
-          </Text>
-          <Button 
-            variant="ghost" 
-            onPress={() => setIsSignUp(!isSignUp)} 
-            disabled={loading}
-            size="small"
-            style={styles.switchButton}
-          >
-            {isSignUp ? 'Sign In' : 'Sign Up'}
-          </Button>
-        </View>
-      </Wrapper>
-
-      {isSignUp && (
-        <Wrapper variant="flat" style={styles.trialInfo}>
-          <Text style={styles.trialTitle}>🎉 Start with 20 Free Jobs!</Text>
-          <Text style={styles.trialText}>
-            No credit card required. Full access to all features including cloud backup, 
-            photo documentation, digital signatures, and PDF reports.
-          </Text>
-          <View style={styles.featureList}>
-            <Text style={styles.featureItem}>✅ 20 jobs included</Text>
-            <Text style={styles.featureItem}>✅ Unlimited photos per job</Text>
-            <Text style={styles.featureItem}>✅ Professional PDF reports</Text>
-            <Text style={styles.featureItem}>✅ Digital signatures</Text>
-            <Text style={styles.featureItem}>✅ Cloud backup & sync</Text>
-          </View>
-        </Wrapper>
-      )}
-    </KeyboardAvoidingWrapper>
-  );
+  return <AuthScreen onAuthSuccess={onAuthSuccess} />;
 }
 
-// Updated Home Screen with minimal sync indicators
+// All other screen wrappers remain the same...
 function HomeScreenWithNav({ navigation }: any) {
   const [syncStatus, setSyncStatus] = useState<any>(null);
 
   useEffect(() => {
-    // Initialize background sync with minimal status updates
     backgroundSyncService.initialize((status) => {
       setSyncStatus(status);
     });
@@ -350,7 +87,6 @@ function HomeScreenWithNav({ navigation }: any) {
   React.useEffect(() => {
     navigation.setOptions({
       headerRight: () => {
-        // Only show indicator if sync is failing AND has pending changes
         const showFailureIndicator = syncStatus?.failureCount >= 3 && syncStatus?.hasPendingChanges;
         
         return (
@@ -378,7 +114,7 @@ function HomeScreenWithNav({ navigation }: any) {
   />;
 }
 
-// Updated job creation with background sync
+// Other screen wrappers remain unchanged (CreateJobScreenWithNav, CameraScreenWithNav, etc.)
 function CreateJobScreenWithNav({ route, navigation }: any) {
   const { editJob } = route.params || {};
 
@@ -390,7 +126,7 @@ function CreateJobScreenWithNav({ route, navigation }: any) {
         ...editJob,
         ...jobData,
       } : {
-        id: generateUUID(), // Generate UUID once here
+        id: generateUUID(),
         ...jobData,
         status: 'created' as const,
         createdAt: new Date().toISOString(),
@@ -399,7 +135,6 @@ function CreateJobScreenWithNav({ route, navigation }: any) {
 
       console.log(`🔄 ${editJob ? 'Editing' : 'Creating'} job with ID: ${updatedJob.id}`);
 
-      // Save locally first
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
       
@@ -412,11 +147,10 @@ function CreateJobScreenWithNav({ route, navigation }: any) {
           console.log(`✅ Updated existing job at index ${jobIndex}`);
         }
       } else {
-        // Double-check we're not creating a duplicate
         const existingJob = jobs.find(j => 
-          j.id === updatedJob.id || // Same ID
+          j.id === updatedJob.id ||
           (j.clientName === updatedJob.clientName && 
-           Math.abs(new Date(j.createdAt).getTime() - new Date(updatedJob.createdAt).getTime()) < 5000) // Same client within 5 seconds
+           Math.abs(new Date(j.createdAt).getTime() - new Date(updatedJob.createdAt).getTime()) < 5000)
         );
         
         if (!existingJob) {
@@ -432,11 +166,10 @@ function CreateJobScreenWithNav({ route, navigation }: any) {
       await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
       console.log(`💾 Saved jobs to storage. Total count: ${jobs.length}`);
       
-      // DELAY the background sync to avoid race conditions
       setTimeout(() => {
         console.log(`🔄 Queuing job ${updatedJob.id} for background sync`);
         backgroundSyncService.queueJobSync(updatedJob, editJob ? 'update' : 'create');
-      }, 1000); // 1 second delay
+      }, 1000);
       
       navigation.navigate('JobDetails', { job: updatedJob });
     } catch (error) {
@@ -458,7 +191,6 @@ function CreateJobScreenWithNav({ route, navigation }: any) {
   );
 }
 
-// Updated camera screen with background sync
 function CameraScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
   const photosRef = React.useRef(job.photos || []);
@@ -476,7 +208,6 @@ function CameraScreenWithNav({ route, navigation }: any) {
         status: calculateJobStatus({ ...job, photos: photosWithUUIDs }),
       };
 
-      // Save locally
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
       const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -486,7 +217,6 @@ function CameraScreenWithNav({ route, navigation }: any) {
         await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
       }
 
-      // Queue for background sync
       backgroundSyncService.queueJobSync(updatedJob, 'update');
 
       return updatedJob;
@@ -516,14 +246,12 @@ function CameraScreenWithNav({ route, navigation }: any) {
   />;
 }
 
-// Updated signature screen with background sync
 function SignatureScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
   const handleJobComplete = async (signatureData: any) => {
     try {
       if (signatureData.completionMethod === 'remote') {
-        // Handle remote signing
         try {
           const result = await remoteSigningService.createRemoteSigningRequest(
             job,
@@ -545,7 +273,6 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           remoteSigningData: signatureData.remoteSigningData,
         };
 
-        // Save locally
         const savedJobs = await AsyncStorage.getItem('proofly_jobs');
         const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
         const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -555,13 +282,11 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
         }
 
-        // Queue for background sync
         backgroundSyncService.queueJobSync(updatedJob, 'update');
         
         navigation.navigate('JobDetails', { job: updatedJob });
 
       } else {
-        // In-person signature completion
         const updatedJob: Job = {
           ...job,
           ...signatureData,
@@ -569,7 +294,6 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           completedAt: new Date().toISOString(),
         };
 
-        // Save locally
         const savedJobs = await AsyncStorage.getItem('proofly_jobs');
         const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
         const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -579,7 +303,6 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
         }
 
-        // Queue for background sync
         backgroundSyncService.queueJobSync(updatedJob, 'complete');
 
         navigation.navigate('JobDetails', { job: updatedJob });
@@ -599,7 +322,6 @@ function SignatureScreenWithNav({ route, navigation }: any) {
   />;
 }
 
-// Updated PDF generator with background sync
 function PDFGeneratorWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
@@ -611,7 +333,6 @@ function PDFGeneratorWithNav({ route, navigation }: any) {
         completedAt: job.completedAt || new Date().toISOString(),
       };
 
-      // Save locally
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
       const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -621,7 +342,6 @@ function PDFGeneratorWithNav({ route, navigation }: any) {
         await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
       }
 
-      // Queue for background sync
       backgroundSyncService.queueJobSync(updatedJob, 'complete');
     } catch (error) {
       console.error('Error marking job as completed:', error);
@@ -650,8 +370,8 @@ function PDFGeneratorWithNav({ route, navigation }: any) {
 function ProfileScreenWithNav({ navigation, onSignOut }: any) {
   const handleSignOut = async () => {
     try {
-      // Clear sync queue on sign out
       await backgroundSyncService.clearSyncQueue();
+      await authStorageService.clearAuthData(); // Clear remember me data
       await supabase.signOut();
       onSignOut();
     } catch (error) {
@@ -663,7 +383,6 @@ function ProfileScreenWithNav({ navigation, onSignOut }: any) {
   return <ProfileScreen onSignOut={handleSignOut} />;
 }
 
-// Other screens remain unchanged...
 function JobDetailsScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
@@ -677,7 +396,6 @@ function JobDetailsScreenWithNav({ route, navigation }: any) {
     });
   }, [navigation]);
 
-  // Pass the job editing functions that properly update without creating duplicates
   const handleEditJob = (editedJob: Job) => {
     navigation.navigate('CreateJob', { editJob: editedJob });
   };
@@ -696,7 +414,6 @@ function JobDetailsScreenWithNav({ route, navigation }: any) {
         await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
         console.log(`✅ Updated job ${updatedJob.id} from JobDetails`);
         
-        // Queue for background sync
         backgroundSyncService.queueJobSync(updatedJob, 'update');
       } else {
         console.log(`⚠️ Job ${updatedJob.id} not found for update in JobDetails`);
@@ -765,6 +482,8 @@ export default function App() {
 
   const checkAuthStatus = async () => {
     try {
+      setIsLoading(true);
+      
       // Initialize RevenueCat
       const revenueCatReady = await revenueCatService.initialize();
       console.log(revenueCatReady ? '✅ RevenueCat ready' : '⚠️ RevenueCat failed (demo mode)');
@@ -772,15 +491,46 @@ export default function App() {
       // Run migration
       await migrationService.runMigrationIfNeeded();
       
-      // Check authentication
+      // ENHANCED: Check for stored auth data first
+      console.log('🔐 Checking for stored authentication...');
+      const hasStoredAuth = await authStorageService.hasValidStoredAuth();
+      
+      if (hasStoredAuth) {
+        console.log('🔐 Found valid stored auth, attempting auto-login...');
+        const storedAuthData = await authStorageService.getStoredAuthData();
+        
+        if (storedAuthData) {
+          // Try to verify the stored token with Supabase
+          try {
+            // Set the token in the HTTP client
+            const user = await getCurrentUser();
+            if (user && user.email === storedAuthData.email) {
+              console.log('✅ Auto-login successful:', user.email);
+              setIsAuthenticated(true);
+              setIsLoading(false);
+              return;
+            } else {
+              console.log('🔐 Stored token invalid, clearing auth data');
+              await authStorageService.clearAuthData();
+            }
+          } catch (error) {
+            console.log('🔐 Token verification failed:', error);
+            await authStorageService.clearAuthData();
+          }
+        }
+      }
+      
+      // Fallback: Check regular authentication
       const user = await getCurrentUser();
       setIsAuthenticated(!!user);
       
       if (user) {
-        console.log('User authenticated:', user.email);
+        console.log('✅ User authenticated:', user.email);
+      } else {
+        console.log('🔐 No authentication found');
       }
     } catch (error) {
-      console.log('Auth check error:', error);
+      console.log('❌ Auth check error:', error);
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
@@ -792,10 +542,12 @@ export default function App() {
   }, []);
 
   const handleAuthSuccess = React.useCallback(async () => {
+    console.log('🎉 Auth success callback triggered');
     await checkAuthStatus();
   }, []);
 
   const handleSignOut = React.useCallback(() => {
+    console.log('👋 Sign out callback triggered');
     setIsAuthenticated(false);
   }, []);
 
@@ -804,7 +556,7 @@ export default function App() {
   }, []);
 
   if (isLoading) {
-    return <LoadingScreen />;
+    return <LoadingScreen message="Checking your authentication..." />;
   }
 
   return (
@@ -876,87 +628,6 @@ const styles = StyleSheet.create({
   },
   profileButtonText: { 
     fontSize: 24 
-  },
-  authContentWrapper: { 
-    flexGrow: 1, 
-    justifyContent: 'center', 
-    padding: 20,
-    minHeight: '100%'
-  },
-  authHeader: { 
-    alignItems: 'center', 
-    marginBottom: 40 
-  },
-  authTitle: { 
-    fontSize: 32, 
-    fontWeight: 'bold', 
-    color: '#333', 
-    marginBottom: 8,
-    textAlign: 'center'
-  },
-  authSubtitle: { 
-    fontSize: 16, 
-    color: '#666', 
-    textAlign: 'center', 
-    lineHeight: 24,
-    paddingHorizontal: 20
-  },
-  authForm: { 
-    marginBottom: 20
-  },
-  primaryButton: { 
-    marginTop: 16
-  },
-  forgotButton: { 
-    marginTop: 16, 
-    alignSelf: 'center'
-  },
-  switchMode: { 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginTop: 24, 
-    paddingTop: 24, 
-    borderTopWidth: 1, 
-    borderTopColor: '#e9ecef' 
-  },
-  switchModeText: { 
-    fontSize: 16, 
-    color: '#666', 
-    marginRight: 8 
-  },
-  switchButton: { 
-    paddingHorizontal: 0 
-  },
-  trialInfo: { 
-    alignItems: 'center', 
-    marginTop: 20 
-  },
-  trialTitle: { 
-    fontSize: 18, 
-    fontWeight: 'bold', 
-    color: '#10B981', 
-    marginBottom: 8,
-    textAlign: 'center'
-  },
-  trialText: { 
-    fontSize: 14, 
-    color: '#10B981', 
-    textAlign: 'center', 
-    lineHeight: 20,
-    marginBottom: 16,
-    opacity: 0.8
-  },
-  featureList: { 
-    alignItems: 'flex-start', 
-    width: '100%' 
-  },
-  featureItem: { 
-    fontSize: 14, 
-    color: '#10B981', 
-    marginBottom: 4, 
-    fontWeight: '500',
-    opacity: 0.9
   },
   upgradeWrapper: { 
     flex: 1, 

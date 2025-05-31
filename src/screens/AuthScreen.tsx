@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import { supabase } from '../services/SupabaseHTTPClient';
+import { authStorageService } from '../services/AuthStorageService';
 import { Colors, Typography, Spacing, Sizes } from '../theme';
 import { Input, Button, Wrapper, KeyboardAvoidingWrapper } from '../components/ui';
 
@@ -16,6 +18,7 @@ interface AuthScreenProps {
 export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true); // Default to true for better UX
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -23,6 +26,24 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     companyName: '',
     phone: ''
   });
+
+  // Load stored email if user was remembered
+  useEffect(() => {
+    loadStoredEmail();
+  }, []);
+
+  const loadStoredEmail = async () => {
+    try {
+      const storedEmail = await authStorageService.getStoredEmail();
+      if (storedEmail) {
+        setFormData(prev => ({ ...prev, email: storedEmail }));
+        setRememberMe(true);
+        console.log('📧 Loaded stored email');
+      }
+    } catch (error) {
+      console.error('Error loading stored email:', error);
+    }
+  };
 
   const validateForm = () => {
     if (!formData.email || !formData.password) {
@@ -55,15 +76,25 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     
     setLoading(true);
     try {
-      const { user, error } = await supabase.signIn(
+      const { user, session, error } = await supabase.signIn(
         formData.email.trim(),
         formData.password
       );
 
       if (error) {
         Alert.alert('Sign In Error', error);
-      } else if (user) {
-        console.log('Sign in successful:', user.email);
+      } else if (user && session) {
+        console.log('✅ Sign in successful:', user.email);
+        
+        // Store auth data with remember me preference
+        await authStorageService.storeAuthData({
+          email: user.email,
+          accessToken: session.access_token,
+          refreshToken: session.refresh_token,
+          expiresIn: session.expires_in,
+          rememberMe: rememberMe,
+        });
+        
         onAuthSuccess();
       } else {
         Alert.alert('Sign In Error', 'Sign in failed - no user returned');
@@ -81,7 +112,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     
     setLoading(true);
     try {
-      const { user, error } = await supabase.signUp(
+      const { user, session, error } = await supabase.signUp(
         formData.email.trim(),
         formData.password,
         {
@@ -94,24 +125,43 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       if (error) {
         Alert.alert('Sign Up Error', error);
       } else if (user) {
-        Alert.alert(
-          'Success!', 
-          'Account created! Please check your email to verify your account before signing in.',
-          [{ 
-            text: 'OK', 
-            onPress: () => {
-              setIsSignUp(false);
-              // Clear form except email for easier sign in
-              setFormData(prev => ({
-                ...prev,
-                password: '',
-                fullName: '',
-                companyName: '',
-                phone: ''
-              }));
-            }
-          }]
-        );
+        // For signup, we might get a session immediately or need email verification
+        if (session) {
+          // Auto-signed in after signup
+          await authStorageService.storeAuthData({
+            email: user.email,
+            accessToken: session.access_token,
+            refreshToken: session.refresh_token,
+            expiresIn: session.expires_in,
+            rememberMe: rememberMe,
+          });
+          
+          Alert.alert(
+            '🎉 Welcome to Proofly!',
+            'Account created successfully! You\'re ready to start documenting your jobs.',
+            [{ text: 'Get Started', onPress: onAuthSuccess }]
+          );
+        } else {
+          // Email verification required
+          Alert.alert(
+            'Success!', 
+            'Account created! Please check your email to verify your account before signing in.',
+            [{ 
+              text: 'OK', 
+              onPress: () => {
+                setIsSignUp(false);
+                // Clear form except email for easier sign in
+                setFormData(prev => ({
+                  ...prev,
+                  password: '',
+                  fullName: '',
+                  companyName: '',
+                  phone: ''
+                }));
+              }
+            }]
+          );
+        }
       } else {
         Alert.alert('Sign Up Error', 'Account creation failed - please try again');
       }
@@ -164,6 +214,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       companyName: '',
       phone: ''
     });
+    setRememberMe(true);
   };
 
   const switchMode = () => {
@@ -253,6 +304,20 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           required
         />
 
+        {/* Remember Me Checkbox - Only show for sign in */}
+        {!isSignUp && (
+          <TouchableOpacity 
+            style={styles.rememberMeContainer}
+            onPress={() => setRememberMe(!rememberMe)}
+            disabled={loading}
+          >
+            <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+              {rememberMe && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.rememberMeText}>Keep me signed in</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Primary Action Button */}
         <Button
           variant="primary"
@@ -326,6 +391,17 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         </Wrapper>
       )}
 
+      {/* Remember Me Info */}
+      {!isSignUp && rememberMe && (
+        <Wrapper variant="flat" style={styles.rememberMeInfo}>
+          <Text style={styles.rememberMeInfoTitle}>🔒 Secure & Convenient</Text>
+          <Text style={styles.rememberMeInfoText}>
+            Your login will be securely stored using device encryption. 
+            You can sign out anytime from the profile screen.
+          </Text>
+        </Wrapper>
+      )}
+
       {/* Connection Status (for debugging) */}
       {__DEV__ && (
         <Wrapper variant="flat" style={styles.debugWrapper}>
@@ -335,6 +411,9 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           </Text>
           <Text style={styles.debugText}>
             Supabase URL: {process.env.EXPO_PUBLIC_SUPABASE_URL ? 'configured' : 'missing'}
+          </Text>
+          <Text style={styles.debugText}>
+            Remember Me: {rememberMe ? 'enabled' : 'disabled'}
           </Text>
         </Wrapper>
       )}
@@ -369,6 +448,40 @@ const styles = StyleSheet.create({
   formWrapper: {
     marginBottom: Spacing.lg,
   },
+  
+  // Remember Me Checkbox Styles
+  rememberMeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    borderRadius: 4,
+    marginRight: Spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  checkmark: {
+    color: Colors.textInverse,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  rememberMeText: {
+    ...Typography.body,
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  
   primaryButton: {
     marginTop: Spacing.md,
   },
@@ -435,6 +548,29 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     opacity: 0.9,
   },
+  
+  // Remember Me Info Section
+  rememberMeInfo: {
+    backgroundColor: Colors.primary + '10',
+    borderColor: Colors.primary + '30',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  rememberMeInfoTitle: {
+    ...Typography.body,
+    color: Colors.primary,
+    fontWeight: 'bold',
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  rememberMeInfoText: {
+    ...Typography.bodySmall,
+    color: Colors.primary,
+    textAlign: 'center',
+    lineHeight: 18,
+    opacity: 0.8,
+  },
+  
   debugWrapper: {
     backgroundColor: Colors.warning + '15',
     borderColor: Colors.warning,

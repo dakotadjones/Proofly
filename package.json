@@ -30,6 +30,7 @@
     "expo-mail-composer": "~14.1.4",
     "expo-media-library": "~17.1.6",
     "expo-print": "~14.1.4",
+    "expo-secure-store": "^14.2.3",
     "expo-sharing": "~13.1.5",
     "expo-status-bar": "~2.2.3",
     "lucide-react": "^0.511.0",
