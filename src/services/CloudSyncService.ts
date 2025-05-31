@@ -1,11 +1,11 @@
 // src/services/CloudSyncService.ts
-// Updated with file size validation and abuse prevention
+// Fixed with automatic ID migration before sync
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, getCurrentUser } from './SupabaseHTTPClient';
 import { Job } from '../screens/HomeScreen';
 import { JobPhoto } from '../screens/CameraScreen';
-import { TIER_LIMITS } from '../utils/JobUtils';
+import { TIER_LIMITS, generateUUID, isValidUUID } from '../utils/JobUtils';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import { Alert } from 'react-native';
@@ -52,6 +52,99 @@ class CloudSyncService {
       await AsyncStorage.setItem('last_sync_time', now);
     } catch (error) {
       console.error('Error saving last sync time:', error);
+    }
+  }
+
+  // CRITICAL: Migrate job and photo IDs before syncing (only for old timestamp IDs)
+  private migrateJobForSync(job: Job): Job {
+    let needsUpdate = false;
+    const migratedJob = { ...job };
+
+    // Only migrate if it's an old timestamp-based ID (not a UUID)
+    if (!isValidUUID(job.id) && this.isTimestampId(job.id)) {
+      console.log(`🔄 Migrating old timestamp job ID ${job.id} to UUID before sync`);
+      migratedJob.id = generateUUID();
+      needsUpdate = true;
+    }
+
+    // Migrate photo IDs if needed (only old timestamp IDs)
+    if (job.photos && job.photos.length > 0) {
+      migratedJob.photos = job.photos.map(photo => {
+        if (!isValidUUID(photo.id) && this.isTimestampId(photo.id)) {
+          console.log(`🔄 Migrating old timestamp photo ID ${photo.id} to UUID before sync`);
+          return { ...photo, id: generateUUID() };
+        }
+        return photo;
+      });
+      
+      // Check if any photo IDs were migrated
+      const photoIdsMigrated = job.photos.some((photo, index) => 
+        photo.id !== migratedJob.photos![index].id
+      );
+      
+      if (photoIdsMigrated) {
+        needsUpdate = true;
+      }
+    }
+
+    // If we migrated IDs, save back to local storage immediately
+    if (needsUpdate) {
+      this.updateLocalJob(migratedJob).catch(error => {
+        console.error('Failed to update local job after ID migration:', error);
+      });
+    }
+
+    return migratedJob;
+  }
+
+  // Check if a string looks like a timestamp-based ID
+  private isTimestampId(id: string): boolean {
+    // Check if it's a numeric string that looks like a timestamp
+    const numericId = parseInt(id, 10);
+    if (isNaN(numericId)) return false;
+    
+    // Timestamp IDs are usually 13 digits (milliseconds since epoch)
+    // or 10 digits (seconds since epoch)
+    const idStr = id.toString();
+    return idStr.length >= 10 && idStr.length <= 13 && /^\d+$/.test(idStr);
+  }
+
+  // Update job in local storage
+  private async updateLocalJob(updatedJob: Job): Promise<void> {
+    try {
+      const savedJobs = await AsyncStorage.getItem('proofly_jobs');
+      if (!savedJobs) return;
+
+      const jobs: Job[] = JSON.parse(savedJobs);
+      
+      // Find job by current ID first
+      const jobIndex = jobs.findIndex(j => j.id === updatedJob.id);
+      
+      if (jobIndex !== -1) {
+        jobs[jobIndex] = updatedJob;
+        await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
+        console.log(`✅ Updated local job ${updatedJob.id}`);
+        return;
+      }
+
+      // If not found by ID, job ID might have changed during migration
+      // Find by client name + creation time but avoid creating duplicates
+      const matchingJobIndex = jobs.findIndex(j => 
+        j.clientName === updatedJob.clientName && 
+        j.createdAt === updatedJob.createdAt &&
+        j.serviceType === updatedJob.serviceType
+      );
+      
+      if (matchingJobIndex !== -1) {
+        // Replace the old job with migrated version
+        jobs[matchingJobIndex] = updatedJob;
+        await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
+        console.log(`✅ Updated local job after ID migration (matched by client + time + service)`);
+      } else {
+        console.log(`⚠️ Could not find matching job to update after migration`);
+      }
+    } catch (error) {
+      console.error('Error updating local job:', error);
     }
   }
 
@@ -297,7 +390,7 @@ class CloudSyncService {
     };
   }
 
-  // Sync single job to cloud using HTTP client with duplicate detection
+  // Sync single job to cloud using HTTP client with ID migration
   async syncJob(job: Job): Promise<SyncResult> {
     try {
       const user = await getCurrentUser();
@@ -305,35 +398,39 @@ class CloudSyncService {
         return { success: false, error: 'Not authenticated' };
       }
 
+      // CRITICAL: Migrate IDs before syncing
+      const migratedJob = this.migrateJobForSync(job);
+      console.log(`🔄 Syncing job ${migratedJob.id} (was: ${job.id})`);
+
       // Check if job already exists in cloud
-      const jobExists = await this.jobExistsInCloud(job.id, user.id);
+      const jobExists = await this.jobExistsInCloud(migratedJob.id, user.id);
 
       // Upload job data via HTTP
-      const jobData = this.jobToDbFormat(job, user.id);
+      const jobData = this.jobToDbFormat(migratedJob, user.id);
       
       if (jobExists) {
         // Update existing job
-        const updateResult = await supabase.update('jobs', jobData, { id: job.id });
+        const updateResult = await supabase.update('jobs', jobData, { id: migratedJob.id });
         if (updateResult.error) {
           throw new Error(updateResult.error);
         }
-        console.log(`Job ${job.id} updated in cloud`);
+        console.log(`Job ${migratedJob.id} updated in cloud`);
       } else {
         // Insert new job
         const jobResult = await supabase.insert('jobs', jobData);
         if (jobResult.error) {
           // If job already exists, try updating instead
           if (jobResult.error.includes('duplicate') || jobResult.error.includes('already exists')) {
-            const updateResult = await supabase.update('jobs', jobData, { id: job.id });
+            const updateResult = await supabase.update('jobs', jobData, { id: migratedJob.id });
             if (updateResult.error) {
               throw new Error(updateResult.error);
             }
-            console.log(`Job ${job.id} updated in cloud (was duplicate)`);
+            console.log(`Job ${migratedJob.id} updated in cloud (was duplicate)`);
           } else {
             throw new Error(jobResult.error);
           }
         } else {
-          console.log(`Job ${job.id} created in cloud`);
+          console.log(`Job ${migratedJob.id} created in cloud`);
         }
       }
 
@@ -341,8 +438,8 @@ class CloudSyncService {
       let photosSynced = 0;
       let photosFailed = 0;
 
-      for (const photo of job.photos) {
-        const uploadResult = await this.uploadPhoto(photo, job.id);
+      for (const photo of migratedJob.photos) {
+        const uploadResult = await this.uploadPhoto(photo, migratedJob.id);
         if (uploadResult.success) {
           photosSynced++;
         } else {
@@ -359,7 +456,7 @@ class CloudSyncService {
         }
       }
 
-      console.log(`Job ${job.id} synced: ${photosSynced} photos uploaded, ${photosFailed} failed`);
+      console.log(`Job ${migratedJob.id} synced: ${photosSynced} photos uploaded, ${photosFailed} failed`);
 
       return {
         success: true,

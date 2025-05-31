@@ -1,3 +1,4 @@
+// App.tsx - Updated with silent background sync
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -17,7 +18,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 
 // Import services
 import { getCurrentUser, supabase } from './src/services/SupabaseHTTPClient';
-import { cloudSyncService } from './src/services/CloudSyncService';
+import { backgroundSyncService } from './src/services/BackgroundSyncService';
 import { migrationService } from './src/services/MigrationService';
 import { remoteSigningService } from './src/services/RemoteSigningService';
 import { revenueCatService } from './src/services/RevenueCatService';
@@ -54,12 +55,12 @@ function LoadingScreen() {
   return (
     <View style={styles.loadingWrapper}>
       <ActivityIndicator size="large" color="#007AFF" />
-      <Text style={styles.loadingText}>Loading Proofly...</Text>
+      <Text style={styles.loadingText}>Getting your jobs...</Text>
     </View>
   );
 }
 
-// Auth Screen
+// Auth Screen (unchanged)
 function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -230,43 +231,43 @@ function AuthScreenWithNav({ navigation, onAuthSuccess }: any) {
   );
 }
 
-// Navigation Screen Components
+// Updated Home Screen with minimal sync indicators
 function HomeScreenWithNav({ navigation }: any) {
-  const [syncStatus, setSyncStatus] = useState<string>('');
+  const [syncStatus, setSyncStatus] = useState<any>(null);
 
   useEffect(() => {
-    const performInitialSync = async () => {
-      try {
-        const user = await getCurrentUser();
-        if (user) {
-          setSyncStatus('Syncing...');
-          const result = await cloudSyncService.syncAllJobs();
-          setSyncStatus(result.success ? `Synced ${result.synced || 0} jobs` : 'Sync failed');
-          setTimeout(() => setSyncStatus(''), 3000);
-        }
-      } catch (error) {
-        console.log('Initial sync failed:', error);
-      }
+    // Initialize background sync with minimal status updates
+    backgroundSyncService.initialize((status) => {
+      setSyncStatus(status);
+    });
+
+    return () => {
+      backgroundSyncService.destroy();
     };
-    performInitialSync();
   }, []);
 
   React.useEffect(() => {
     navigation.setOptions({
-      headerRight: () => syncStatus ? (
-        <View style={styles.headerRight}>
-          <View style={styles.syncStatus}>
-            <Text style={styles.syncStatusText}>{syncStatus}</Text>
+      headerRight: () => {
+        // Only show indicator if sync is failing AND has pending changes
+        const showFailureIndicator = syncStatus?.failureCount >= 3 && syncStatus?.hasPendingChanges;
+        
+        return (
+          <View style={styles.headerRight}>
+            {showFailureIndicator && (
+              <View style={styles.syncFailureIndicator}>
+                <View style={styles.failureDot} />
+              </View>
+            )}
+            <TouchableOpacity 
+              style={styles.profileButton}
+              onPress={() => navigation.navigate('Profile')}
+            >
+              <Text style={styles.profileButtonText}>👤</Text>
+            </TouchableOpacity>
           </View>
-        </View>
-      ) : (
-        <TouchableOpacity 
-          style={styles.profileButton}
-          onPress={() => navigation.navigate('Profile')}
-        >
-          <Text style={styles.profileButtonText}>👤</Text>
-        </TouchableOpacity>
-      ),
+        );
+      },
     });
   }, [navigation, syncStatus]);
 
@@ -276,63 +277,65 @@ function HomeScreenWithNav({ navigation }: any) {
   />;
 }
 
-function JobDetailsScreenWithNav({ route, navigation }: any) {
-  const { job } = route.params;
-
-  React.useEffect(() => {
-    navigation.setOptions({
-      headerLeft: () => (
-        <TouchableOpacity onPress={() => navigation.navigate('Home')} style={{ marginLeft: 15 }}>
-          <Text style={{ color: 'white', fontSize: 16 }}>← Home</Text>
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation]);
-
-  return <JobDetailsScreen
-    job={job}
-    onEditJob={(job: Job) => navigation.navigate('CreateJob', { editJob: job })}
-    onTakePhotos={(job: Job) => navigation.navigate('Camera', { job })}
-    onGetSignature={(job: Job) => navigation.navigate('Signature', { job })}
-    onGeneratePDF={(job: Job) => navigation.navigate('PDFGenerator', { job })}
-  />;
-}
-
+// Updated job creation with background sync
 function CreateJobScreenWithNav({ route, navigation }: any) {
   const { editJob } = route.params || {};
 
   const handleJobCreated = async (jobData: JobFormData) => {
     try {
+      console.log('🔄 Starting job creation...');
+      
       const updatedJob: Job = editJob ? {
         ...editJob,
         ...jobData,
       } : {
-        id: generateUUID(),
+        id: generateUUID(), // Generate UUID once here
         ...jobData,
         status: 'created' as const,
         createdAt: new Date().toISOString(),
         photos: [],
       };
 
+      console.log(`🔄 ${editJob ? 'Editing' : 'Creating'} job with ID: ${updatedJob.id}`);
+
+      // Save locally first
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
       
+      console.log(`📊 Current jobs count before save: ${jobs.length}`);
+      
       if (editJob) {
         const jobIndex = jobs.findIndex(j => j.id === editJob.id);
-        if (jobIndex !== -1) jobs[jobIndex] = updatedJob;
+        if (jobIndex !== -1) {
+          jobs[jobIndex] = updatedJob;
+          console.log(`✅ Updated existing job at index ${jobIndex}`);
+        }
       } else {
-        jobs.push(updatedJob);
+        // Double-check we're not creating a duplicate
+        const existingJob = jobs.find(j => 
+          j.id === updatedJob.id || // Same ID
+          (j.clientName === updatedJob.clientName && 
+           Math.abs(new Date(j.createdAt).getTime() - new Date(updatedJob.createdAt).getTime()) < 5000) // Same client within 5 seconds
+        );
+        
+        if (!existingJob) {
+          jobs.push(updatedJob);
+          console.log(`✅ Added new job. Jobs count now: ${jobs.length}`);
+        } else {
+          console.log('⚠️ Job already exists, skipping duplicate creation');
+          navigation.navigate('JobDetails', { job: existingJob });
+          return;
+        }
       }
       
       await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
+      console.log(`💾 Saved jobs to storage. Total count: ${jobs.length}`);
       
-      // Auto-sync
-      try {
-        const user = await getCurrentUser();
-        if (user) cloudSyncService.autoSyncJob(updatedJob);
-      } catch (error) {
-        console.log('Auto-sync failed, continuing offline:', error);
-      }
+      // DELAY the background sync to avoid race conditions
+      setTimeout(() => {
+        console.log(`🔄 Queuing job ${updatedJob.id} for background sync`);
+        backgroundSyncService.queueJobSync(updatedJob, editJob ? 'update' : 'create');
+      }, 1000); // 1 second delay
       
       navigation.navigate('JobDetails', { job: updatedJob });
     } catch (error) {
@@ -354,6 +357,7 @@ function CreateJobScreenWithNav({ route, navigation }: any) {
   );
 }
 
+// Updated camera screen with background sync
 function CameraScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
   const photosRef = React.useRef(job.photos || []);
@@ -371,6 +375,7 @@ function CameraScreenWithNav({ route, navigation }: any) {
         status: calculateJobStatus({ ...job, photos: photosWithUUIDs }),
       };
 
+      // Save locally
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
       const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -378,15 +383,10 @@ function CameraScreenWithNav({ route, navigation }: any) {
       if (jobIndex !== -1) {
         jobs[jobIndex] = updatedJob;
         await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
-        console.log('Successfully saved job with', photosWithUUIDs.length, 'photos');
       }
 
-      try {
-        const user = await getCurrentUser();
-        if (user) cloudSyncService.autoSyncJob(updatedJob);
-      } catch (error) {
-        console.log('Photo sync failed, continuing offline:', error);
-      }
+      // Queue for background sync
+      backgroundSyncService.queueJobSync(updatedJob, 'update');
 
       return updatedJob;
     } catch (error) {
@@ -415,14 +415,14 @@ function CameraScreenWithNav({ route, navigation }: any) {
   />;
 }
 
+// Updated signature screen with background sync
 function SignatureScreenWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
   const handleJobComplete = async (signatureData: any) => {
     try {
       if (signatureData.completionMethod === 'remote') {
-        console.log('Remote signing initiated:', signatureData.remoteSigningData);
-        
+        // Handle remote signing
         try {
           const result = await remoteSigningService.createRemoteSigningRequest(
             job,
@@ -434,8 +434,6 @@ function SignatureScreenWithNav({ route, navigation }: any) {
             Alert.alert('Error', `Failed to send remote signing request: ${result.error}`);
             return;
           }
-
-          console.log('Remote signing request created successfully:', result.requestId);
         } catch (error) {
           console.warn('Remote signing service failed, continuing with basic flow:', error);
         }
@@ -446,6 +444,7 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           remoteSigningData: signatureData.remoteSigningData,
         };
 
+        // Save locally
         const savedJobs = await AsyncStorage.getItem('proofly_jobs');
         const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
         const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -455,16 +454,13 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
         }
 
-        try {
-          const user = await getCurrentUser();
-          if (user) cloudSyncService.autoSyncJob(updatedJob);
-        } catch (error) {
-          console.log('Remote signing sync failed, continuing offline:', error);
-        }
+        // Queue for background sync
+        backgroundSyncService.queueJobSync(updatedJob, 'update');
         
         navigation.navigate('JobDetails', { job: updatedJob });
 
       } else {
+        // In-person signature completion
         const updatedJob: Job = {
           ...job,
           ...signatureData,
@@ -472,6 +468,7 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           completedAt: new Date().toISOString(),
         };
 
+        // Save locally
         const savedJobs = await AsyncStorage.getItem('proofly_jobs');
         const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
         const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -481,12 +478,8 @@ function SignatureScreenWithNav({ route, navigation }: any) {
           await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
         }
 
-        try {
-          const user = await getCurrentUser();
-          if (user) cloudSyncService.autoSyncJob(updatedJob);
-        } catch (error) {
-          console.log('Signature sync failed, continuing offline:', error);
-        }
+        // Queue for background sync
+        backgroundSyncService.queueJobSync(updatedJob, 'complete');
 
         navigation.navigate('JobDetails', { job: updatedJob });
       }
@@ -505,6 +498,7 @@ function SignatureScreenWithNav({ route, navigation }: any) {
   />;
 }
 
+// Updated PDF generator with background sync
 function PDFGeneratorWithNav({ route, navigation }: any) {
   const { job } = route.params;
 
@@ -516,6 +510,7 @@ function PDFGeneratorWithNav({ route, navigation }: any) {
         completedAt: job.completedAt || new Date().toISOString(),
       };
 
+      // Save locally
       const savedJobs = await AsyncStorage.getItem('proofly_jobs');
       const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
       const jobIndex = jobs.findIndex(j => j.id === job.id);
@@ -525,12 +520,8 @@ function PDFGeneratorWithNav({ route, navigation }: any) {
         await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
       }
 
-      try {
-        const user = await getCurrentUser();
-        if (user) cloudSyncService.autoSyncJob(updatedJob);
-      } catch (error) {
-        console.log('PDF generation sync failed, continuing offline:', error);
-      }
+      // Queue for background sync
+      backgroundSyncService.queueJobSync(updatedJob, 'complete');
     } catch (error) {
       console.error('Error marking job as completed:', error);
     }
@@ -558,6 +549,8 @@ function PDFGeneratorWithNav({ route, navigation }: any) {
 function ProfileScreenWithNav({ navigation, onSignOut }: any) {
   const handleSignOut = async () => {
     try {
+      // Clear sync queue on sign out
+      await backgroundSyncService.clearSyncQueue();
       await supabase.signOut();
       onSignOut();
     } catch (error) {
@@ -569,7 +562,59 @@ function ProfileScreenWithNav({ navigation, onSignOut }: any) {
   return <ProfileScreen onSignOut={handleSignOut} />;
 }
 
-// Upgrade Screen placeholder (you'll create this next)
+// Other screens remain unchanged...
+function JobDetailsScreenWithNav({ route, navigation }: any) {
+  const { job } = route.params;
+
+  React.useEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={() => navigation.navigate('Home')} style={{ marginLeft: 15 }}>
+          <Text style={{ color: 'white', fontSize: 16 }}>← Home</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
+
+  // Pass the job editing functions that properly update without creating duplicates
+  const handleEditJob = (editedJob: Job) => {
+    navigation.navigate('CreateJob', { editJob: editedJob });
+  };
+
+  const handleJobUpdate = async (updatedJob: Job) => {
+    try {
+      console.log(`🔄 JobDetails updating job ${updatedJob.id}`);
+      
+      const savedJobs = await AsyncStorage.getItem('proofly_jobs');
+      const jobs: Job[] = savedJobs ? JSON.parse(savedJobs) : [];
+      
+      const jobIndex = jobs.findIndex(j => j.id === updatedJob.id);
+      
+      if (jobIndex !== -1) {
+        jobs[jobIndex] = updatedJob;
+        await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobs));
+        console.log(`✅ Updated job ${updatedJob.id} from JobDetails`);
+        
+        // Queue for background sync
+        backgroundSyncService.queueJobSync(updatedJob, 'update');
+      } else {
+        console.log(`⚠️ Job ${updatedJob.id} not found for update in JobDetails`);
+      }
+    } catch (error) {
+      console.error('Error updating job from JobDetails:', error);
+    }
+  };
+
+  return <JobDetailsScreen
+    job={job}
+    onEditJob={handleEditJob}
+    onTakePhotos={(job: Job) => navigation.navigate('Camera', { job })}
+    onGetSignature={(job: Job) => navigation.navigate('Signature', { job })}
+    onGeneratePDF={(job: Job) => navigation.navigate('PDFGenerator', { job })}
+    onJobUpdate={handleJobUpdate} // Add this prop
+  />;
+}
+
 function UpgradeScreenWithNav({ route, navigation }: any) {
   const { reason } = route.params || {};
 
@@ -579,8 +624,6 @@ function UpgradeScreenWithNav({ route, navigation }: any) {
 
   const handleUpgrade = async () => {
     try {
-      console.log('🔄 Starting RevenueCat purchase flow...');
-      
       const result = await revenueCatService.purchaseSubscription();
       
       if (result.success) {
@@ -621,26 +664,19 @@ export default function App() {
 
   const checkAuthStatus = async () => {
     try {
-      // Initialize RevenueCat first
-      console.log('🔄 Initializing RevenueCat...');
+      // Initialize RevenueCat
       const revenueCatReady = await revenueCatService.initialize();
-      
-      if (revenueCatReady) {
-        console.log('✅ RevenueCat ready');
-      } else {
-        console.log('⚠️ RevenueCat failed to initialize (demo mode)');
-      }
+      console.log(revenueCatReady ? '✅ RevenueCat ready' : '⚠️ RevenueCat failed (demo mode)');
 
-      // Run migration using centralized service
+      // Run migration
       await migrationService.runMigrationIfNeeded();
       
+      // Check authentication
       const user = await getCurrentUser();
       setIsAuthenticated(!!user);
       
       if (user) {
         console.log('User authenticated:', user.email);
-      } else {
-        console.log('No user authenticated');
       }
     } catch (error) {
       console.log('Auth check error:', error);
@@ -709,10 +745,15 @@ export default function App() {
 const styles = StyleSheet.create({
   loadingWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
   loadingText: { marginTop: 16, fontSize: 18, color: '#666' },
-  syncStatus: { marginRight: 15, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: 'rgba(255, 255, 255, 0.2)', borderRadius: 12 },
-  syncStatusText: { color: 'white', fontSize: 12, fontWeight: '500' },
-  headerRight: { flexDirection: 'row', alignItems: 'center' },
-  profileButton: { marginRight: 15, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', marginRight: 15 },
+  syncFailureIndicator: { marginRight: 10 },
+  failureDot: { 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4, 
+    backgroundColor: '#FF3B30' 
+  },
+  profileButton: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   profileButtonText: { fontSize: 24 },
   authWrapper: { flex: 1, backgroundColor: '#f8f9fa' },
   authContentWrapper: { flexGrow: 1, justifyContent: 'center', padding: 20 },
@@ -731,7 +772,6 @@ const styles = StyleSheet.create({
   trialInfo: { backgroundColor: '#e8f5e8', borderRadius: 12, padding: 20, marginTop: 20, alignItems: 'center' },
   trialTitle: { fontSize: 18, fontWeight: 'bold', color: '#2d5a2d', marginBottom: 8 },
   trialText: { fontSize: 14, color: '#2d5a2d', textAlign: 'center', lineHeight: 20 },
-  // Upgrade screen styles
   upgradeWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f8f9fa' },
   upgradeTitle: { fontSize: 24, fontWeight: 'bold', color: '#333', marginBottom: 20 },
   upgradeText: { fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 30, lineHeight: 24 },

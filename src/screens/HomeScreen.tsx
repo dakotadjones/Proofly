@@ -1,3 +1,4 @@
+// src/screens/HomeScreen.tsx - Updated with pull-to-refresh sync
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -12,6 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { calculateJobStatus, getStatusColor, getStatusText, getStatusDescription } from '../utils/JobUtils';
+import { backgroundSyncService } from '../services/BackgroundSyncService';
 import { Colors, Typography, Spacing, Sizes, Theme } from '../theme';
 import { Wrapper, Button, JobStatusBadge, EmptyState } from '../components/ui';
 
@@ -78,8 +80,19 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadJobs();
-    setRefreshing(false);
+    
+    try {
+      // Force a background sync on pull-to-refresh
+      await backgroundSyncService.forceSync();
+      
+      // Reload local jobs (they may have been updated from cloud)
+      await loadJobs();
+    } catch (error) {
+      console.log('Refresh sync failed, loading local jobs only');
+      await loadJobs();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const deleteJob = async (jobId: string, jobTitle: string) => {
@@ -98,6 +111,9 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
               const updatedJobs = jobs.filter(job => job.id !== jobId);
               await AsyncStorage.setItem('proofly_jobs', JSON.stringify(updatedJobs));
               setJobs(updatedJobs);
+              
+              // Note: We don't sync deletions to cloud in this simple implementation
+              // In a more complex app, you'd queue deletion for sync
             } catch (error) {
               Alert.alert('Error', 'Failed to delete job');
             }
@@ -233,7 +249,13 @@ export default function HomeScreen({ onNewJob, onJobSelect }: HomeScreenProps) {
         keyExtractor={(item) => item.id}
         contentContainerStyle={jobs.length === 0 ? styles.emptyWrapper : styles.listWrapper}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={Colors.primary}
+            title="Syncing jobs..."
+            titleColor={Colors.textSecondary}
+          />
         }
         ListEmptyComponent={EmptyStateComponent}
         showsVerticalScrollIndicator={false}

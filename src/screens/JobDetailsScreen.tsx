@@ -21,6 +21,7 @@ interface JobDetailsScreenProps {
   onTakePhotos: (job: Job) => void;
   onGetSignature: (job: Job) => void;
   onGeneratePDF: (job: Job) => void;
+  onJobUpdate?: (job: Job) => void; // Optional callback for updates
 }
 
 export default function JobDetailsScreen({
@@ -29,6 +30,7 @@ export default function JobDetailsScreen({
   onTakePhotos,
   onGetSignature,
   onGeneratePDF,
+  onJobUpdate,
 }: JobDetailsScreenProps) {
   const [job, setJob] = useState<Job>(initialJob);
 
@@ -37,26 +39,50 @@ export default function JobDetailsScreen({
     React.useCallback(() => {
       const loadJobFromStorage = async () => {
         try {
+          console.log(`🔍 JobDetails refreshing job ${job.id}`);
+          
           const savedJobs = await AsyncStorage.getItem('proofly_jobs');
           if (savedJobs) {
             const jobs: Job[] = JSON.parse(savedJobs);
             const updatedJob = jobs.find(j => j.id === job.id);
+            
             if (updatedJob) {
-              console.log('Refreshed job with', updatedJob.photos.length, 'photos');
+              console.log(`✅ Found updated job with ${updatedJob.photos.length} photos`);
               
-              // Update status using centralized logic
-              const jobWithUpdatedStatus = {
-                ...updatedJob,
-                status: calculateJobStatus(updatedJob)
-              };
+              // Calculate new status
+              const newStatus = calculateJobStatus(updatedJob);
               
-              setJob(jobWithUpdatedStatus);
-              
-              // Save back the updated status
-              const jobsWithUpdatedStatus = jobs.map(j => 
-                j.id === job.id ? jobWithUpdatedStatus : j
-              );
-              await AsyncStorage.setItem('proofly_jobs', JSON.stringify(jobsWithUpdatedStatus));
+              // Only update if status actually changed
+              if (updatedJob.status !== newStatus) {
+                console.log(`🔄 Status changed from ${updatedJob.status} to ${newStatus}`);
+                
+                const jobWithUpdatedStatus = {
+                  ...updatedJob,
+                  status: newStatus
+                };
+                
+                // Update local state
+                setJob(jobWithUpdatedStatus);
+                
+                // Update storage WITHOUT creating duplicates
+                const updatedJobs = jobs.map(j => 
+                  j.id === job.id ? jobWithUpdatedStatus : j
+                );
+                
+                await AsyncStorage.setItem('proofly_jobs', JSON.stringify(updatedJobs));
+                console.log(`✅ Updated job status in storage (no duplicates)`);
+                
+                // Notify parent if callback provided
+                if (onJobUpdate) {
+                  onJobUpdate(jobWithUpdatedStatus);
+                }
+              } else {
+                // Just update local state, no storage changes needed
+                setJob(updatedJob);
+                console.log(`✅ Job loaded, no status change needed`);
+              }
+            } else {
+              console.log(`⚠️ Job ${job.id} not found in storage`);
             }
           }
         } catch (error) {
@@ -65,7 +91,7 @@ export default function JobDetailsScreen({
       };
 
       loadJobFromStorage();
-    }, [job.id])
+    }, [job.id]) // Only depend on job.id, not the whole job object
   );
 
   const getNextStep = () => {
@@ -402,6 +428,7 @@ export default function JobDetailsScreen({
   );
 }
 
+// Styles remain the same...
 const styles = StyleSheet.create({
   Wrapper: {
     flex: 1,
@@ -431,7 +458,7 @@ const styles = StyleSheet.create({
   },
   statusWrapper: {
     marginHorizontal: Spacing.screenPadding,
-    marginTop: -Spacing.lg, // Overlap with header
+    marginTop: -Spacing.lg,
     marginBottom: Spacing.md,
   },
   statusTitle: {
@@ -483,7 +510,6 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
   },
-  // Remote Status Styles
   remoteStatusWrapper: {
     backgroundColor: Colors.gray50,
     borderRadius: Sizes.radiusMedium,
@@ -528,16 +554,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
   },
-  remoteActionButton: {
-    // Button component handles styling
-  },
+  remoteActionButton: {},
   actionsWrapper: {
     paddingHorizontal: Spacing.screenPadding,
     gap: Spacing.md,
   },
-  actionWrapper: {
-    // Wrapper component handles styling
-  },
+  actionWrapper: {},
   disabledWrapper: {
     opacity: 0.6,
   },
@@ -602,9 +624,7 @@ const styles = StyleSheet.create({
     borderRadius: Sizes.radiusSmall,
     marginBottom: Spacing.xs,
   },
-  photoBadge: {
-    // Badge component handles styling
-  },
+  photoBadge: {},
   progressItems: {
     gap: Spacing.md,
   },
